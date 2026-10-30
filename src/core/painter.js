@@ -62,6 +62,31 @@ export class Painter {
     const b = Math.min(255, ((d >>> 16) & 255) + ((c >>> 16) & 255) * k) | 0;
     this.L[i] = (255 << 24) | (b << 16) | (g << 8) | r;
   }
+  /**
+   * Blend a color over what's there at alpha a (0..1), keeping the result's own alpha: soft smoke, vapour and
+   * mist. Use dithered dot() for hard pixel fades and blend() for translucent volumes.
+   */
+  blendPx(sx, sy, c, a) {
+    a *= this.fade;
+    if (!c || a <= 0.004) return;
+    const x = sx - this.ox, y = sy - this.oy;
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
+    const i = y * this.w + x, d = this.C[i], da = (d >>> 24) / 255, oa = a + da * (1 - a), k = a / oa;
+    const ch = (s) => ((((c >>> s) & 255) * k + ((d >>> s) & 255) * (1 - k)) & 255);
+    this.C[i] = (((oa * 255) & 255) << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0);
+  }
+  /** Translucent pixel at a local point. */
+  blend(x, y, c, a) { this.blendPx(this.cellX(x, y), this.cellY(x, y), c, a); }
+  /** A translucent disc: puffs of smoke, vapour, dust. c and a may be functions of (d: 0 center..1 rim, angle). */
+  disc(cx, cy, r, c, a) {
+    if (r < 0.5) return this.blend(cx, cy, call(c, 0, 0), call(a, 0, 0));
+    this.each(cx - r, cy - r, cx + r, cy + r, (x, y, sx, sy) => {
+      const dx = x - cx, dy = y - cy, d2 = dx * dx + dy * dy;
+      if (d2 > r * r) return;
+      const d = Math.sqrt(d2) / r, ang = Math.atan2(dy, dx);
+      this.blendPx(sx, sy, call(c, d, ang), call(a, d, ang));
+    });
+  }
   /** Read back the color under a local point (0 if empty). */
   get(x, y) {
     const sx = this.cellX(x, y) - this.ox, sy = this.cellY(x, y) - this.oy;

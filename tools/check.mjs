@@ -50,7 +50,7 @@ for (const id of ids) {
       return x >= 0 && y >= 0 && x < W && y < H;
     };
     const opts = { ...(meta.options ?? {}), seed: meta.options?.seed ?? 1 };
-    if (meta.actor) opts.actor = stockActor();
+    if (meta.actor) opts.actor = stockActor(meta.actor === 2 ? 2 : 1);
     const n = Math.max(2, Math.round(meta.duration * meta.fps));
     let maxPx = 0, spill = 0, spillLight = 0, ms = [], bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
     const bounds = () => frame.color.forEach((c, j) => {
@@ -123,14 +123,36 @@ for (const id of ids) {
       const med = ms[ms.length >> 1];
       if (med > 4) notes.push(`slow: ${med.toFixed(1)} ms a frame`);
     } else {
-      const inst = createFx(mod, { x: meta.origin[0], y: meta.origin[1], ...opts });
-      for (let i = 0; i <= n; i++) {
-        if (i) inst.update(1 / meta.fps);
-        clearFrame(frame);
-        inst.draw(frame);
-        maxPx = Math.max(maxPx, count(frame.color, (c) => c >>> 24));
-      }
+      // a simulation: step it in order, as a game would, and check every frame
+      const run = (seed) => {
+        const inst = createFx(mod, { x: meta.origin[0], y: meta.origin[1], ...opts, seed });
+        const shots = [];
+        for (let i = 0; i <= n; i++) {
+          if (i) inst.update(1 / meta.fps);
+          clearFrame(frame);
+          const t0 = performance.now();
+          inst.draw(frame);
+          ms.push(performance.now() - t0);
+          shots.push(frame.color.slice());
+          maxPx = Math.max(maxPx, count(frame.color, (c, j) => c >>> 24 && inside(j)), count(frame.light, (c, j) => (c & 0xffffff) && inside(j)));
+          const sp = count(frame.color, (c, j) => c >>> 24 && !inside(j));
+          if (sp > spill) (spill = sp), bounds();
+          spillLight = Math.max(spillLight, count(frame.light, (c, j) => (c & 255) + ((c >>> 8) & 255) + ((c >>> 16) & 255) > 90 && !inside(j)));
+        }
+        return shots;
+      };
+      const a = run(opts.seed), b = run(opts.seed);
+      for (const seed of [2, 3, 7]) run(seed);
       if (maxPx === 0) errs.push("draws nothing");
+      if (spill > 0) notes.push(`${spill} px drawn outside the ${W}x${H} canvas (drawing spans x ${bx0}..${bx1}, y ${by0}..${by1}): grow size or move origin`);
+      if (spillLight > 60) notes.push(`glow spills ${spillLight} px past the canvas`);
+      if (a.some((s, i) => count(s, (c, j) => c !== b[i][j]) > 0)) errs.push("not deterministic: two runs with the same seed differ");
+      if (!meta.loop) {
+        const left = count(a[a.length - 1], (c, j) => c >>> 24 && inside(j));
+        if (left > 0) notes.push(`${left} px still drawn at t = duration: one-shots should end empty`);
+      }
+      ms.sort((x, y) => x - y);
+      if (ms[ms.length >> 1] > 4) notes.push(`slow: ${ms[ms.length >> 1].toFixed(1)} ms a frame`);
     }
   } catch (e) {
     errs.push(String(e.message ?? e).split("\n")[0]);

@@ -39,7 +39,7 @@ export function resolveOptions(meta, o = {}) {
   const opts = { ...(meta.options ?? {}), ...o };
   for (const [k, def] of Object.entries(meta.options ?? {}))
     if (isRamp(def) && isRamp(o[k]) && o[k].length !== def.length) opts[k] = fit(o[k], def.length).map(toHex);
-  if (meta.actor && !opts.actor) opts.actor = stockActor();
+  if (meta.actor && !opts.actor) opts.actor = stockActor(meta.actor === 2 ? 2 : 1);
   return opts;
 }
 
@@ -62,7 +62,10 @@ export function createFx(mod, o = {}) {
     },
     update(dt) {
       t += dt;
-      impl.update?.(dt, opts);
+      if (!impl.update) return;
+      // simulations step at 120 Hz or finer whatever the caller's frame rate, so they look the same everywhere
+      const n = Math.max(1, Math.ceil(dt * 120 - 1e-9));
+      for (let i = 0; i < n; i++) impl.update(dt / n, opts);
     },
     draw(frame, layer) {
       const p = painterFor(frame);
@@ -99,22 +102,24 @@ export function composite(f, out, bg = null, lightK = 1) {
   for (let i = 0; i < n; i++) {
     const c = C[i], l = L[i] & 0xffffff;
     let r, g, b, a;
-    if (c >>> 24) {
+    const ca = c >>> 24;
+    if (ca === 255) {
       r = c & 255; g = (c >>> 8) & 255; b = (c >>> 16) & 255; a = 255;
     } else if (bg === null) {
-      r = g = b = a = 0;
+      // translucent color over nothing keeps its alpha
+      r = c & 255; g = (c >>> 8) & 255; b = (c >>> 16) & 255; a = ca;
     } else {
-      const k = flat ? bg : bg[i];
-      r = k & 255; g = (k >>> 8) & 255; b = (k >>> 16) & 255; a = 255;
+      const k = flat ? bg : bg[i], f = ca / 255;
+      r = (c & 255) * f + (k & 255) * (1 - f); g = ((c >>> 8) & 255) * f + ((k >>> 8) & 255) * (1 - f);
+      b = ((c >>> 16) & 255) * f + ((k >>> 16) & 255) * (1 - f); a = 255;
     }
     if (l) {
       const lr = (l & 255) * lightK, lg = ((l >>> 8) & 255) * lightK, lb = ((l >>> 16) & 255) * lightK;
-      if (a === 0) {
-        const m = Math.min(255, Math.max(lr, lg, lb));
-        if (m >= 1) {
-          const s = 255 / Math.max(lr, lg, lb);
-          r = lr * s; g = lg * s; b = lb * s; a = m;
-        }
+      if (a < 255) {
+        // over transparency: premultiply what's there, add the light, divide by the new alpha
+        const pa = a / 255, pr = r * pa + lr, pg = g * pa + lg, pb = b * pa + lb;
+        const na = Math.min(1, Math.max(pa, Math.max(lr, lg, lb) / 255));
+        if (na > 0) { r = Math.min(255, pr / na); g = Math.min(255, pg / na); b = Math.min(255, pb / na); a = na * 255; }
       } else {
         r = Math.min(255, r + lr); g = Math.min(255, g + lg); b = Math.min(255, b + lb);
       }

@@ -47,7 +47,7 @@ blasts, smoke, fireworks, mushroom clouds.
 | Mine blast | `explosions/mine-blast` | one-shot 1.9s | 88×124 | A buried mine blinks red twice and arms, then fires a narrow jet of fire and dirt straight up; clods rain back down and a crater smokes in the floor. |
 | Nuke | `explosions/nuke` | one-shot 4.4s | 176×172 | A blinding white flash, then a fireball lifts off on a rising stem and rolls into a mushroom cloud, cooling to smoke as a ring of dust surges out along the ground. |
 | Plasma explosion | `explosions/plasma-explosion` | one-shot 0.95s | 104×104 | A blue-white energy blast: a white core flash, a crackling plasma sphere that swells and hollows out, three shock rings, arcs of lightning, plasma motes. |
-| Small explosion | `explosions/small-explosion` | one-shot 1.2s | 84×88 | A quick blast: a white flash frame, a lumpy fireball that cools from the edges into rising smoke, a shockwave, sparks and debris. |
+| Explosion | `explosions/small-explosion` | one-shot 5.4s | 300×240 | A ground blast: a white flash and shock rings, fire that cools into a rolling smoke column, sparks, burning brands that land and keep burning, tumbling rocks and a glowing scorch. |
 | Smoke puff | `explosions/smoke-puff` | one-shot 0.75s | 60×52 | A cartoon poof: round outlined puffs pop out with a bounce, drift apart and blink away one by one, with speed lines and a couple of twinkles. |
 
 ## water
@@ -82,7 +82,7 @@ spikes, novas, freezing, shattering.
 | Cold mist | `ice/cold-mist` | loop 4s | 128×32 | Low freezing fog rolls along the floor in two layers drifting right at different speeds, thick at the ground, wispy on top, with ice glints winking in it. |
 | Freeze | `ice/freeze` | one-shot 2.4s | 64×52 | Frost creeps up the character from the feet, an ice block snaps shut around them, glints, cracks, then bursts apart into shards. |
 | Frost breath | `ice/frost-breath` | loop 1s | 104×44 | An icy gust blows right in a widening cone: frost puffs swell and tear apart, streaks of wind race past and ice crystals tumble and twinkle. |
-| Frost nova | `ice/frost-nova` | one-shot 1.3s | 128×64 | A white flash at the feet, then a ring of ice crystals bursts outward across a frosting floor, slows, shatters into spinning shards and melts away. |
+| Frost nova | `ice/frost-nova` | one-shot 3.4s | 288×192 | Frost spirals into a spinning snowflake, then a wave blooms three rings of ice crystals round the caster; snow drifts, frost creeps, and the ice melts back into the floor. |
 | Frozen ground | `ice/frozen-ground` | one-shot 2.6s | 128×32 | Frost creeps out across the floor in feathery fingers, little crystals sprout as it passes and glint; then it all goes glassy, wet and melts away. |
 | Hail impact | `ice/hail-impact` | loop 1.2s | 80×48 | Hailstones pelt the ground at a slant: each hits with a white crack and a puff of powder, bounces, hops, and melts away; some burst into chips. |
 | Ice crystal | `ice/ice-crystal` | loop 2.4s | 48×64 | A floating six-sided ice crystal turns slowly and bobs: its facets catch the light in turn, a shine sweeps across, a star winks at its tip, motes circle. |
@@ -153,7 +153,7 @@ slashes, smears, cleaves, combos.
 | Scythe reap | `melee/scythe-reap` | one-shot 0.9s | 72×68 | A slow, huge reap: a dark crescent with a pale ghostly edge hangs in the air a beat, then tears away and leaves its ghost to rise, waver and fade. |
 | Spear sweep | `melee/spear-sweep` | one-shot 0.7s | 92×40 | A long polearm swept low around the front: a wide flat arc skims the floor from behind to the far side, kicking up a wake of dust. |
 | Spin slash | `melee/spin-slash` | one-shot 0.45s | 76×48 | A full-circle spin attack: the blade sweeps a ring around the fighter's waist, front then back, and the ring flares out and dissolves. |
-| Sword slash | `melee/sword-slash` | one-shot 0.4s | 72×68 | A fast crescent smear: the white edge whips through in four frames, the tail catches up and dissolves, glints fly off. |
+| Sword slash | `melee/sword-slash` | one-shot 0.75s | 136×104 | A tilted crescent whips round in two frames, cools from white to deep blue as it trails off, glints at the tip and throws sparks. |
 | Thrust | `melee/thrust` | one-shot 0.4s | 76×40 | A piercing stab: a narrow lance of streaks shoots out in two frames, a sharp star flashes at the tip, speed lines and sparks run on past it. |
 | Uppercut | `melee/uppercut` | one-shot 0.45s | 56×62 | A rising punch: a swoosh hooks up from the hip past the face, and a fat comic star bursts where the fist lands up high. |
 | Whip crack | `melee/whip-crack` | one-shot 0.55s | 92×54 | A whip lashes out to the right: a loop rolls down its length, the tip snaps straight with a white crack and sparks, then the lash sags and fades. |

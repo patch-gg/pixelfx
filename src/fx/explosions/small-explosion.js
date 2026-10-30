@@ -1,91 +1,150 @@
-import { PAL, RAMP, fit, at, burst, fly, flyV, seg, ease, clamp, noise2, TAU, WHITE } from "../../core/index.js";
+// The particle recipe (fire puffs that cool into smoke, sparks, embers, burning brands, grit, rocks, scorch) is
+// adapted from Sprite Fusion's open-source explosion (https://www.spritefusion.com/pixel-art-vfx/explosion),
+// MIT License, Copyright (c) 2026 Hugo Duprez.
+import { Particles, Bits, Lights, Blazes, P, PF, B, Rng, fit, band, clamp, smooth, ease, rand, TAU, WHITE, hex, mix, scale, rgb } from "../../core/index.js";
 
 export const meta = {
-  name: "Small explosion",
-  desc: "A quick blast: a white flash frame, a lumpy fireball that cools from the edges into rising smoke, a shockwave, sparks and debris.",
-  tags: ["explosion", "fire", "smoke", "impact", "one-shot"],
-  size: [84, 88],
-  origin: [42, 48],
-  duration: 1.2,
+  name: "Explosion",
+  desc: "A ground blast: a white flash and shock rings, fire that cools into a rolling smoke column, sparks, burning brands that land and keep burning, tumbling rocks and a glowing scorch.",
+  tags: ["explosion", "fire", "smoke", "debris", "impact", "one-shot"],
+  size: [300, 240],
+  origin: [150, 196],
+  duration: 5.4,
   loop: false,
   fps: 30,
-  bg: "dark",
-  options: { palette: PAL.fire, size: 1, seed: 3 },
+  bg: "ground",
+  options: { palette: ["#4a1712", "#c9281f", "#f2561d", "#ff8a2a", "#ffc23d", "#ffe26b", "#fff3a6", "#ffffff"], stone: "#4a3f69", size: 1, seed: 7 },
 };
 
-export function draw(p, t, o) {
-  const F = fit(o.palette, 8), SM = RAMP.smoke, S = o.seed, k = o.size;
-  const FIRE = [F[2], F[3], F[4], F[5], F[6], F[7], WHITE]; // cool edge .. white-hot core
+const SOOT = hex("#0d0a12"), SOOT2 = hex("#17121d"), OUTLINE = hex("#1a1422"), WARM = rgb(255, 176, 96);
 
-  // puffs: pushed out fast then drifting up; each is both a ball of heat and, later, a ball of smoke
-  const puffs = [];
-  burst(12, S, (r, i) => {
-    const ang = (i / 12) * TAU + r.range(-0.35, 0.35), reach = (i < 2 ? r.range(0, 3) : r.range(5, 13)) * k;
-    const age = t - (i < 2 ? 0 : r.range(0.01, 0.07)), life = r.range(0.75, 1.05);
-    if (age < 0 || age > life) return;
-    const q = age / life, e = ease.outCubic(seg(age, 0, 0.28));
-    const x = Math.cos(ang) * reach * e, y = Math.sin(ang) * reach * e * 0.7 - age * age * 26 * k;
-    const r0 = r.range(5, 8) * k * (0.5 + 0.7 * e);
-    puffs.push({
-      x, y,
-      fr: r0 * (1 - 0.45 * seg(q, 0.15, 0.6)), heat: 1 - seg(q, 0.05, 0.62),
-      sx: x, sy: y - q * q * 16 * k, sr: r0 * (1.05 + 0.8 * q), smoke: seg(q, 0.12, 0.4) * (1 - seg(q, 0.62, 1)),
-    });
-  });
-  // the field: the strongest puff at each pixel decides, with light from the top-left
-  const field = (x, y, rk, vk, xk, yk) => {
-    let best = 0, lit = 0;
-    for (const f of puffs) {
-      const dx = x - f[xk], dy = y - f[yk], d = Math.sqrt(dx * dx + dy * dy) / f[rk];
-      if (d >= 1) continue;
-      const v = (1 - d * d) * f[vk];
-      if (v > best) (best = v), (lit = (-dx - dy * 1.4) / f[rk]);
+function stone(c) {
+  c = hex(c);
+  return { light: mix(scale(c, 1.35), WHITE, 0.08), body: c, shade: scale(c, 0.64), dust: mix(scale(c, 1.2), rgb(150, 140, 150), 0.3) };
+}
+
+// the floor under the blast: white-hot, cooling through the fire ramp to soot
+function scorch(p, F, t, rx0, cool, fade) {
+  if (fade <= 0) return;
+  const rx = rx0 * Math.min(1, t / 0.08), ry = 4, heat = [...F].reverse();
+  for (let y = 0; y <= 2; y++)
+    for (let x = Math.floor(-rx); x <= Math.ceil(rx); x++) {
+      const dx = (x + 0.5) / rx, dy = (y + 0.5) / ry, d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 1) continue;
+      const k = rand(x * 31 + y, 3), T = Math.pow(clamp(1 - t / cool), 1.4) * (1.25 - d) - k * 0.35;
+      if (T > 0.06) {
+        const c = heat[Math.min(heat.length - 1, Math.floor((1 - Math.min(1, T)) * (heat.length - 1)))];
+        p.dot(x, y, c, fade);
+        if ((x & 3) === 0) p.glow(x + 0.5, y, 6, c, 0.18 * T * fade);
+      } else p.dot(x, y, d < 0.5 ? SOOT : SOOT2, (d < 0.95 - k * 0.3 ? 1 : 1 - d) * fade);
     }
-    return [best, lit];
+}
+
+// a rock: a lit side, a shaded side, an outline, spinning
+function rock(p, b, st) {
+  const r = 0.6 + b.s * 0.75, fade = Math.min(1, b.life / 0.5), lx = Math.cos(b.a) * r * 0.4, ly = Math.sin(b.a) * r * 0.4;
+  p.shade(b.x - r - 1, b.y - r - 1, b.x + r + 1, b.y + r + 1, (x, y, out) => {
+    const dx = x - b.x, dy = y - b.y, d = Math.hypot(dx * 1.15, dy);
+    if (d > r + 0.9) return;
+    const lit = dx * lx + dy * ly;
+    out.c = d > r ? OUTLINE : lit < -0.4 ? st.light : lit > 0.6 ? st.shade : st.body;
+    out.a = fade;
+  });
+}
+
+export function create(o) {
+  const F = fit(o.palette, 8), S = o.size, RAD = 18 * S, POWER = 0.9 * Math.pow(S, 0.8), EARTH = 1.6, st = stone(o.stone);
+  const R = new Rng(o.seed), floor = () => 0;
+  let blazes;
+  const ps = new Particles({ rng: R, ground: floor, sparks: [F[6], F[5], F[3], F[2]], onLand: (x, y) => blazes.add(x, y - 0.25, R.range(0.9, 1.5), R.range(0.55, 0.85)) });
+  blazes = new Blazes(ps);
+  const rocks = new Bits({ ground: floor }), lights = new Lights(), flashes = [], rings = [];
+  const Y = -RAD * 0.3;
+  let t = 0;
+
+  // the fireball
+  flashes.push({ r: RAD * 1.05, life: 0.06, max: 0.06 });
+  rings.push({ r0: RAD * 0.45, r1: RAD * 2.7, life: 0.34, max: 0.34, thick: 3, c: F[5] }, { r0: RAD * 0.3, r1: RAD * 1.6, life: 0.22, max: 0.22, thick: 1.8, c: F[3] });
+  lights.add(0, Y, RAD * 3.4, WARM, 0.6 * POWER, 0.7);
+  lights.add(0, Y, RAD * 1.6, WHITE, 0.6, 0.08);
+  for (let i = 0; i < 5; i++) ps.spawn(P.FIRE, R.range(-2.5, 2.5), Y + R.range(-2.5, 2.5), R.range(-20, 20), R.range(-40, -10), R.range(0.18, 0.3), 0, R.range(RAD * 0.4, RAD * 0.55));
+  for (let i = 0; i < Math.round(28 * POWER); i++) {
+    const a = R.range(0, TAU), d = R.range(0, RAD * 0.55), sp = R.range(40, 210) * POWER;
+    ps.spawn(P.FIRE, Math.cos(a) * d, Y + Math.sin(a) * d, Math.cos(a) * sp, Math.sin(a) * sp * 0.8 - 40, R.range(0.55, 1.15), 0, R.range(RAD * 0.22, RAD * 0.46), 0, R.chance(0.45) ? PF.SMOKES | PF.BIG : 0);
+  }
+  for (let i = 0; i < 5; i++) {
+    const a = R.range(0, TAU), d = R.range(RAD * 0.1, RAD * 0.5);
+    ps.spawn(P.SMOKE, Math.cos(a) * d, Y + Math.sin(a) * d, Math.cos(a) * 30, Math.sin(a) * 20 - 30, R.range(0.9, 1.5), rgb(34, 29, 38), R.range(RAD * 0.15, RAD * 0.26), R.range(0.06, 0.2), PF.BIG);
+  }
+  for (let i = 0; i < 5; i++) ps.spawn(P.FIRE, R.range(-RAD * 0.25, RAD * 0.25), Y, R.range(-12, 12), R.range(-180, -100), R.range(0.8, 1.3), 0, R.range(RAD * 0.24, RAD * 0.36), R.range(0, 0.1), R.chance(0.6) ? PF.SMOKES | PF.BIG : 0);
+  for (let i = 0; i < Math.round(10 * POWER); i++) {
+    const a = R.range(0, TAU), d = R.range(0, RAD * 0.7), sp = R.range(15, 100);
+    ps.spawn(P.SMOKE, Math.cos(a) * d, Y + Math.sin(a) * d, Math.cos(a) * sp, Math.sin(a) * sp * 0.6 - 35, R.range(1.8, 2.8), 0, R.range(RAD * 0.26, RAD * 0.44), R.range(0.12, 0.45), PF.BIG);
+  }
+  for (let i = 0; i < Math.round(80 * POWER); i++) {
+    const a = R.range(0, TAU), sp = R.range(140, 380) * POWER;
+    ps.spawn(P.SPARK, 0, Y, Math.cos(a) * sp, Math.sin(a) * sp - 70, R.range(0.18, 0.6));
+  }
+  for (let i = 0; i < Math.round(40 * POWER); i++) {
+    const a = R.range(0, TAU), sp = R.range(30, 150);
+    ps.spawn(P.EMBER, Math.cos(a) * RAD * 0.4, Y + Math.sin(a) * RAD * 0.4, Math.cos(a) * sp, Math.sin(a) * sp - 75, R.range(1.2, 2.6), F[3]);
+  }
+  for (let i = 0; i < Math.round(R.range(9, 14) * Math.max(0, POWER - 0.55)); i++) {
+    const a = -Math.PI / 2 + R.range(-1.35, 1.35), sp = R.range(170, 330);
+    ps.spawn(P.BRAND, 0, Y, Math.cos(a) * sp, Math.sin(a) * sp, R.range(0.7, 1.3));
+  }
+  // the ground's part: dust rolling out along the floor, rocks and grit thrown up, a dust column
+  for (let i = 0; i < Math.round(RAD * 0.5); i++) {
+    const s = R.sign();
+    ps.spawn(P.SMOKE, s * R.range(0, RAD * 0.6), -R.range(1, 5 + RAD * 0.04), s * R.range(3, 9.5) * RAD, -R.range(2, 15), R.range(1.1, 2.0), st.dust, R.range(4, 7) + RAD / 6, R.range(0, 0.06), PF.BIG);
+  }
+  for (let i = 0; i < 26 * Math.min(1.5, S); i++)
+    rocks.add({ kind: B.CHUNK, x: R.range(-0.4, 0.4) * RAD, y: -3, vx: R.range(-9, 9) * RAD * 0.25, vy: -R.range(7, 16) * RAD * 0.9, g: 1, drag: 0.4, bounce: 0.3, life: R.range(1.8, 2.6), a: R.range(0, TAU), va: R.range(-16, 16), s: R.int(1, 3) });
+  for (let i = 0; i < Math.round(EARTH * RAD * 4); i++) {
+    const u = R.range(-1, 1), a = -Math.PI / 2 + u * 0.5, sp = R.range(5, 15) * RAD * (1 - 0.45 * Math.abs(u));
+    ps.spawn(P.GRIT, u * 0.25 * RAD, -1, Math.cos(a) * sp, Math.sin(a) * sp, R.range(1.2, 2.2), R.pick([st.light, st.body, st.body, st.shade]), R.chance(0.45) ? 2 : 1);
+  }
+  for (let i = 0; i < Math.round(EARTH * 12); i++)
+    ps.spawn(P.SMOKE, R.range(-0.3, 0.3) * RAD, -R.range(2, RAD * 0.6), R.range(-15, 15), -R.range(60, 190) * EARTH * 0.6, R.range(1.6, 2.6), st.dust, R.range(5, 9) * Math.sqrt(S) + RAD / 7, R.range(0, 0.15), PF.BIG);
+
+  return {
+    update(dt) {
+      t += dt;
+      for (const a of [flashes, rings]) for (let i = a.length - 1; i >= 0; i--) if ((a[i].life -= dt) <= 0) a.splice(i, 1);
+      rocks.update(dt);
+      // rocks that hit hard kick up dust
+      for (const b of rocks.list)
+        if (b.rest && !b.dusted) {
+          b.dusted = true;
+          for (let i = 0; i < 3; i++) ps.spawn(P.DUST, b.x + R.range(-1.5, 1.5), -0.5, R.sign() * R.range(10, 55) * 0.6, -R.range(2, 22), R.range(0.3, 0.65), st.dust, R.range(1.3, 2.8));
+        }
+      blazes.update(dt);
+      ps.update(dt);
+      lights.update(dt);
+    },
+    drawBack(p) {
+      scorch(p, F, t, 22 * S, 1.2 + RAD / 14, 1 - smooth(meta.duration - 1.2, meta.duration - 0.2, t));
+      ps.draw(p, "back");
+      blazes.drawBack(p);
+      const k = t / 0.5;
+      if (k < 1) band(p, 0, 0.5, 80 * S * ease.outCubic(k), 0.16, Math.max(1, (2 + RAD / 9) * (1 - k)), 1.15 - k, [st.body, st.light, F[3], F[6]], (g) => Math.sin(g) < 0);
+    },
+    draw(p) {
+      const k = t / 0.5;
+      if (k < 1) band(p, 0, 0.5, 80 * S * ease.outCubic(k), 0.16, Math.max(1, (2 + RAD / 9) * (1 - k)), 1.15 - k, [st.body, st.light, F[3], F[6]], (g) => Math.sin(g) >= 0);
+      for (const b of rocks.list) rock(p, b, st);
+      ps.draw(p, "front");
+      for (const f of flashes) {
+        const k2 = f.life / f.max, r = f.r * (0.8 + 0.2 * k2);
+        p.circle(0, Y, r + 1.2, F[2]);
+        p.circle(0, Y, r, k2 > 0.45 ? F[6] : F[5]);
+        p.circle(0, Y, r * 0.6, k2 > 0.45 ? WHITE : F[6]);
+      }
+      for (const r of rings) {
+        const k2 = r.life / r.max, e = 1 - Math.pow(k2, 3);
+        p.ring(0, Y, r.r0 + (r.r1 - r.r0) * e, Math.max(1, r.thick * k2 + 0.4), r.c, Math.min(1, k2 * 1.6));
+      }
+      lights.draw(p);
+    },
   };
-  // debris: dark chunks tossed up and falling (behind the fire, so they show once they're clear of it)
-  burst(6, S + 2, (r) => {
-    const a = -Math.PI / 2 + r.range(-1.2, 1.2), sp = r.range(50, 95) * k, life = r.range(0.4, 0.55);
-    if (t > life) return;
-    const [x, y] = fly(0, 0, Math.cos(a) * sp, Math.sin(a) * sp, t, 260, 0.5), s = r.next() < 0.5 ? 2 : 1;
-    p.rect(x, y, s, s, SM[1], 1 - seg(t, life * 0.7, life));
-  });
-  // smoke behind
-  p.shade(-36, -42, 36, 30, (x, y, out) => {
-    const [v, lit] = field(x, y, "sr", "smoke", "sx", "sy");
-    if (v < 0.06) return;
-    out.c = at(SM.slice(1, 6), 0.25 + lit * 0.3 + v * 0.35 + noise2(x * 0.4, y * 0.4, S) * 0.12);
-    out.a = clamp(v * 4);
-  });
-  // fire in front
-  p.shade(-36, -42, 36, 30, (x, y, out) => {
-    const [v, lit] = field(x, y, "fr", "heat", "x", "y");
-    if (v < 0.08) return;
-    out.c = at(FIRE, v * 0.95 + lit * 0.12 + noise2(x * 0.5, y * 0.5, S + 1) * 0.1);
-    out.k = v * 0.25;
-  });
-  // flash: one or two frames of solid white, the frame that sells the hit
-  if (t < 0.07) {
-    p.circle(0, 0, (6 + 40 * t) * k, WHITE);
-    p.glow(0, 0, 48 * k, F[6], 0.9);
-  }
-  // shockwave: a thin ring racing out, dithering away
-  const sw = seg(t, 0.02, 0.24);
-  if (sw > 0 && sw < 1) {
-    const r = (8 + 22 * ease.outCubic(sw)) * k;
-    p.ring(0, 0, r, 1, F[7], 1 - sw * 0.9);
-    p.glowRing(0, 0, r, 4, F[5], 0.3 * (1 - sw));
-  }
-  // sparks: streaks along their velocity, falling, cooling yellow to red
-  burst(14, S + 1, (r) => {
-    const a = r.range(0, TAU), sp = r.range(60, 120) * k, life = r.range(0.3, 0.55);
-    if (t > life) return;
-    const q = t / life, vx0 = Math.cos(a) * sp, vy0 = Math.sin(a) * sp - 30;
-    const [x, y] = fly(0, 0, vx0, vy0, t, 160, 2.5), [vx, vy] = flyV(vx0, vy0, t, 160, 2.5);
-    p.line(x, y, x - vx * 0.025, y - vy * 0.025, q < 0.3 ? F[7] : q < 0.6 ? F[5] : F[3]);
-    p.light(x, y, F[5], 0.6 * (1 - q));
-  });
-  // the blast lights everything up, then lets go fast
-  const L = 1 - seg(t, 0, 0.5);
-  p.glow(0, -2, 42 * k, F[5], 0.55 * L * L);
 }
