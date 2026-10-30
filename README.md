@@ -15,7 +15,8 @@ picky pixel artist would: draft, render, look, refine.
 The method is [Hugo Duprez](https://x.com/HugoDuprez)'s, from [How to make (good) pixel art effects with
 Claude](https://www.spritefusion.com/blog/how-to-make-good-pixel-art-effects-with-claude): code is clay, trust your
 eyes, feed your references. His [open-source effects](https://www.spritefusion.com/pixel-art-vfx) at Sprite Fusion
-set the bar. This repo is our take on the idea at library scale, with a skill to keep going.
+set the bar, and `src/core/sim.js` and the effects that say so at the top adapt his code. This repo is our take on
+the idea at library scale, with a skill to keep going.
 
 ## what's in it.
 
@@ -118,21 +119,21 @@ bar. `node tools/serve.mjs` runs the gallery locally with your effects in it.
 
 ## how it works.
 
-- **An effect is a function of time.** `draw(p, t, o)` draws the frame at `t` seconds. No simulation state, no
-  images, so any frame can be drawn in any order: scrubbed, looped, or rendered to a sheet.
-- **Two buffers.** `color` takes hard, opaque pixels; transparency is faked with a 4×4 ordered dither, so it stays
-  pixel art. `light` takes additive glow, added on top. Hot things look hot because of the light buffer.
-- **Seeded everything.** Particles get their own repeatable random numbers (`burst`, `cycle`, `rng(seed, i)`), and
-  their motion is closed-form (`fly`: gravity and drag without stepping), so frame 40 is the same every time.
-  Loops tile in time with no seam.
+- **Two kinds of effect, no images.** Pure effects export `draw(p, t, o)`, the frame at `t` seconds from `t` alone, so
+  loops tile with no seam. Simulated effects export `create(o)` and step real particles, debris and lights at 120 Hz,
+  so sparks bounce and smoke rolls the same at any frame rate.
+- **Two buffers.** `color` takes pixels: opaque, dithered or truly translucent. `light` takes additive glow, added on
+  top. Hot things look hot because of the light buffer.
+- **Seeded everything.** Every random number comes from the effect's seed, so frame 40 is the same every time.
 - **Local space.** Effects draw around their own origin; the painter places, mirrors and rotates them. Directional
-  effects face right. A 12×19 stock character stands in for status effects, auras and hits.
+  effects face right. A 24×38 stock character stands in for status effects, auras and hits.
 - **Same frame shape as Sprite Fusion's VFX** (`{ w, h, ox, oy, color, light }`), so both libraries can draw into
   one frame.
 
 ## license.
 
-MIT, code and effects. Use them in anything, commercial included. The Patch Pixel font in `gallery/fonts` is
-Patch's own and not covered; see its notice.
+MIT, code and effects. Use them in anything, commercial included. Parts are adapted from Hugo Duprez's MIT effects,
+as the [license](LICENSE) notes. The Patch Pixel font in `gallery/fonts` is Patch's own and not covered; see its
+notice.
 
 Made by [Patch](https://patch.gg).

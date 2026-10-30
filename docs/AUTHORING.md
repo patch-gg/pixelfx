@@ -143,12 +143,12 @@ The method is Hugo Duprez's ([How to make (good) pixel art effects with
 Claude](https://www.spritefusion.com/blog/how-to-make-good-pixel-art-effects-with-claude)): code is clay, trust
 your eyes, feed your references.
 
-1. **Reference first.** Find the closest of his effects (`~/patch/pixelfx-ref/sheets/`), look at it, read its
-   source (`~/patch/pixelfx-ref/src/<name>.ts`) for the choreography and numbers.
+1. **Reference first.** Find the closest of [his effects](https://www.spritefusion.com/pixel-art-vfx), look at it, and
+   read its source for the choreography and numbers. His code uses world units, 2 per pixel.
 2. **Say it in one line** with the art direction, then draft.
 3. **Render and look**: `node tools/render.mjs <id> --zoom 3` (contact sheet in `records/<id>/contact.png`;
    `--all` every frame, `--mp4` motion).
-4. **Benchmark**: `node ~/patch/pixelfx-ref/tools/compare.mjs <out.png> <hisSpec> <id> --theirs ... --ours ...`
-   puts his and yours at the same height. If his has more detail, light or life, yours isn't done.
+4. **Benchmark**: put his and yours next to each other at the same height on screen. If his has more detail, light
+   or life, yours isn't done.
 5. **Fix the worst thing, render again.** Three rounds minimum; showpieces take more.
 6. **Check**: `node tools/check.mjs <id>` until it passes clean.

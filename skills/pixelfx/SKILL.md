@@ -1,16 +1,15 @@
 ---
 name: pixelfx
-description: Make pixel art effects and sprite animations in code with the pixelfx library, which has about 300 ready-made ones (fire, explosions, water, ice, lightning, sci-fi, melee, impacts, projectiles, spawn and death, arcane, holy, shadow, status, nature, weather, UI, pickups, transitions, critters) to drop into a game, recolor, export as sprite sheets or remix, plus a draft, render, look, refine loop that makes new ones look hand-animated. Use when someone wants pixel art VFX, sprite animations or sprite sheets, game juice, a specific effect ("a frost nova for my mage", "a coin pickup sparkle"), wants to use or export a pixelfx effect in Godot, Unity, Phaser or a canvas game, or wants their pixel effects to look better.
+description: Make pixel art effects and sprite animations in code with the pixelfx library, which has 232 ready-made ones (fire, explosions, water, ice, lightning, sci-fi, melee, impacts, projectiles, spawn and death, arcane, holy, shadow, status, nature, weather, UI, pickups, transitions, critters) to drop into a game, recolor, export as sprite sheets or remix, plus a draft, render, look, refine loop that makes new ones look hand-animated. Use when someone wants pixel art VFX, sprite animations or sprite sheets, game juice, a specific effect ("a frost nova for my mage", "a coin pickup sparkle"), wants to use or export a pixelfx effect in Godot, Unity, Phaser or a canvas game, or wants their pixel effects to look better.
 license: MIT
 compatibility: Node 18 or newer. ffmpeg is optional (GIF and MP4 previews).
 ---
 
 # pixelfx
 
-Pixel art effects as code. Each effect is one small file, `src/fx/<category>/<name>.js`, that draws a frame as a
-function of time into two buffers: **color** (hard pixels, faded with ordered dither) and **light** (additive
-glow). Because a frame is just `draw(p, t)`, an effect can be played live, scrubbed, recolored, mirrored, looped
-and rendered to a sprite sheet for any engine.
+Pixel art effects as code. Each effect is one file, `src/fx/<category>/<name>.js`, that draws into two buffers:
+**color** (pixels: opaque, dithered or truly translucent) and **light** (additive glow). No images, so an effect
+can be played live, recolored, mirrored, reseeded and rendered to a sprite sheet for any engine.
 
 The method is Hugo Duprez's ([How to make (good) pixel art effects with
 Claude](https://www.spritefusion.com/blog/how-to-make-good-pixel-art-effects-with-claude)): code is clay, trust
@@ -76,21 +75,24 @@ For the full library: `node tools/render.mjs <category> --sheet` does a whole ca
 
 ## 3. Make a new one
 
-Read `docs/AUTHORING.md` first: it is the contract (meta, `draw(p, t, o)`, local coordinates, seamless loops,
-ending empty), the painter API, the helpers and the quality bar. Then:
+Read `docs/AUTHORING.md` first: it is the contract (meta, `draw(p, t, o)` for pure effects or `create(o)` for
+simulated ones, local coordinates, seamless loops, ending empty), the toolkit, the painter API and the quality bar.
+Then:
 
 1. **Say it in one line** with art direction: what it is, how it moves, its palette, its timing. "A frost nova:
    crystals erupt in a ring from the feet outward, a white flash at the center, shards spin off, the floor stays
    frosted and fades."
 2. **Find references** in the library: `node tools/list.mjs <words>`, then read the two or three closest effect
-   files. Borrow their techniques (a merged heat field for fireballs, `p.arc` for smears, `cycle` for seamless
-   particles, `tileFbm` scrolls for flames and water).
+   files and borrow their techniques (`Particles` and `Bits` in `src/core/sim.js` for sparks, smoke and debris,
+   `p.disc` for translucent volumes, `cycle` for seamless particles, `tileFbm` scrolls for flames and water). Look at
+   the closest of [Hugo Duprez's effects](https://www.spritefusion.com/pixel-art-vfx) too: they are the quality bar.
+   If his has more detail, light or life at the same size on screen, yours isn't done.
 3. **Draft.** `node tools/new.mjs <category>/<name>` (add `--loop` for a loop) gives a working file. When the
    direction is open, write 3 to 5 genuinely different drafts (`<name>-a.js` .. `-e.js`), render them all
    (`node tools/render.mjs "<category>/<name>-*"`) and look at every contact sheet before choosing. Show the user
    the strongest two or three if they're around (`--gif` makes animations to share).
 4. **Look, judge, fix.** Render, open `records/<id>/contact.png`, and judge like a picky pixel artist. Fix the
-   worst thing, render again. Two to four rounds is normal; a showpiece takes more. `--all` shows every frame,
+   worst thing, render again. Three rounds minimum; a showpiece takes more. `--all` shows every frame,
    `--mp4` shows motion at full speed.
 5. **Check.** `node tools/check.mjs <id>` catches drawing outside the canvas, one-shots that don't end empty,
    loop seams, unseeded randomness and slow frames. Fix until it passes clean. Delete the drafts you didn't keep.
@@ -105,18 +107,18 @@ What to look for, and the usual fix:
 | stiff or mechanical | vary every particle (size, speed, delay, life), add secondary motion (sparks, smoke, debris) |
 | washed out | less glow (k 0.2 to 0.5), darker edge steps, keep white for the hottest core only |
 | flat | light from one side: brighter top-left, darker bottom-right step; a darker ramp step at the base |
-| smooth gradients, vector look | hard ramp steps in color, dither for fades, softness only in light |
+| smooth gradients, vector look | hard ramp steps in color; softness only in light and in translucent smoke |
+| a checkerboard where smoke should be | `SMOKE`, `VAPOUR` or `DUST` particles, or `p.disc`: truly translucent, lit on top |
 | seam when a loop wraps | `cycle`, `loopNoise(phase)`, whole-cell `tileNoise` scrolls, `sin(phase * TAU * n)` |
 | a one-shot that pops off | let it shrink, dither out or fall away before t = duration |
 
-Directional effects face right, ground effects stand on y = 0, actor effects wrap `o.actor` (a 12 x 19 stock
-character's mask), and nothing uses `Math.random`. Generic motifs are fine; never recreate a specific game's
+Directional effects face right, ground effects stand on y = 0, actor effects wrap `o.actor` (a 24 x 38 stock
+character's mask and pixels), and nothing uses `Math.random`. Generic motifs are fine; never recreate a specific game's
 sprites, characters or logos.
 
 ## 4. Native code instead of JS
 
 If the game can't run JS and a sprite sheet isn't enough (an effect that follows a moving target, or needs
-per-instance colors at runtime), port the effect: it is a pure function of time. Keep the two-buffer idea, the
-4x4 Bayer threshold for alpha, the palette ramp lookups and the closed-form particle motion (`fly` in
-`src/core/particles.js`); a GDScript or C# port of one effect is usually under 150 lines. Render the JS original
-and your port side by side to check they match.
+per-instance colors at runtime), port the effect. Pure effects are a function of time; simulated ones step the particles in
+`src/core/sim.js`. Keep the two-buffer idea, the 4x4 Bayer threshold for dithered alpha and the palette ramp lookups.
+Render the JS original and your port side by side to check they match.

@@ -1,6 +1,9 @@
 MIT License
 
 Copyright (c) 2026 Patch
+Copyright (c) 2026 Hugo Duprez, for the parts adapted from Sprite Fusion's open-source
+pixel art VFX (https://www.spritefusion.com/pixel-art-vfx): src/core/sim.js and the
+effects that say so at the top of their file
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
