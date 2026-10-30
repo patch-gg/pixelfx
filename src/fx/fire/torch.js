@@ -1,62 +1,91 @@
-import { PAL, ramp, fit, at, cycle, tileFbm, loopNoise, clamp, TAU } from "../../core/index.js";
+// The tongue, lick, flame-puff, smoke and ember recipe is adapted from Sprite Fusion's open-source fire
+// (https://www.spritefusion.com/pixel-art-vfx/fire), MIT License, Copyright (c) 2026 Hugo Duprez.
+import { fit, mix, hex, rand, clamp } from "../../core/index.js";
+import { noiseFor, hotFirst, burn } from "./_lib.js";
 
 export const meta = {
   name: "Torch",
-  desc: "A wall torch: a licking flame on a wooden handle, rising embers, warm flickering light.",
-  tags: ["fire", "light", "prop", "ambient"],
-  size: [36, 64],
-  origin: [18, 44],
-  duration: 1.2,
+  desc: "A wall torch on an iron bracket: a licking flame leaping off a pitch-soaked wrap, licks and puffs torn off its tips, smoke, embers, a flickering light on the wall.",
+  tags: ["fire", "torch", "prop", "light", "wall", "dungeon", "loop"],
+  size: [72, 120],
+  origin: [36, 94],
+  duration: 2,
   loop: true,
   fps: 30,
   bg: "dark",
-  options: { palette: PAL.fire, handle: true, height: 22, seed: 1 },
+  options: {
+    palette: ["#4a1712", "#8a1f17", "#c9281f", "#f2561d", "#ff8a2a", "#ffc23d", "#ffe26b", "#fff3a6", "#ffffff"],
+    wood: ["#0e080a", "#24130f", "#3b2216", "#5a3520", "#8a5a34", "#b9884f"],
+    iron: ["#0d0b12", "#1e1b26", "#363242", "#5b5566", "#8a8396"],
+    seed: 4,
+  },
 };
 
-const WOOD = ramp(["#2a160c", "#4a2a16", "#6e4222", "#8e5a30"]);
-const IRON = ramp(["#1b1a22", "#34323f", "#55525f", "#807c8a"]);
+const D = meta.duration, NL = noiseFor(D), BASE = -16;
+// the flame: [x, y from the wrap's top, height share, half-width, back row?]
+const TONGUES = [
+  [-1.9, -1, 0.74, 2.0, 1],
+  [2.1, -1, 0.7, 2.0, 1],
+  [-3.4, 0.5, 0.42, 1.6, 0],
+  [3.6, 0.5, 0.46, 1.6, 0],
+  [0, 0, 1, 2.9, 0],
+];
+
+// the bracket: a bevelled iron plate on the wall with two rivets, and a ring round the handle
+function plate(p, I, H, fl) {
+  p.shade(-5.5, -5.5, 5.5, 11.5, (x, y) => {
+    if (x < -5 || x > 5 || y < -5 || y > 11) return I[0];
+    const rv = Math.abs(x) < 0.6 && (Math.abs(y + 3.5) < 0.6 || Math.abs(y - 9.5) < 0.6);
+    if (rv) return mix(I[4], H[3], 0.35 * fl);
+    if (y < -4 || x < -4) return mix(I[3], H[4], 0.3 * fl);
+    if (y > 10 || x > 4) return I[1];
+    return y < 2 ? I[2] : I[1];
+  });
+}
+function handle(p, W) {
+  p.shade(-3, -12, 3, 15, (x, y) => {
+    const half = 1.3 + clamp((14 - y) / 26) * 0.9;
+    if (Math.abs(x) > half + 0.5 || y > 14.5) return;
+    if (Math.abs(x) > half - 0.5 || y > 13.5) return W[0];
+    const g = rand(Math.floor(y / 3), Math.round(x), 9);
+    return x < -0.3 ? (g < 0.3 ? W[2] : W[4]) : g < 0.4 ? W[1] : W[2];
+  });
+}
+function ring(p, I, H, fl) {
+  p.rect(-3, -2, 7, 4, I[0]);
+  p.rect(-2, -1, 5, 1, mix(I[4], H[3], 0.3 * fl));
+  p.rect(-2, 0, 5, 1, I[2]);
+}
+// the head: rags bound with cord and soaked in pitch, flaring into a cup at the top, charred where it burns
+// with embers breathing in the folds
+function wrap(p, W, I, H, t) {
+  p.shade(-6, BASE - 2, 6, -9, (x, y, out) => {
+    const v = (y - (BASE - 1.5)) / 7.5, half = 4.6 - v * 1.9;
+    if (Math.abs(x) > half + 0.5 || y < BASE - 1.5 || y > -9.5) return;
+    if (Math.abs(x) > half - 0.5 || y > -10.5) return W[0];
+    const cord = Math.floor(y - x * 0.6 + 40) % 3 === 0, h = rand(Math.floor(x), Math.floor(y), 31);
+    if (v < 0.45) {
+      if (h < 0.42) {
+        const g = 0.5 + 0.5 * Math.sin((t / D) * Math.PI * 4 + h * 40);
+        out.k = 0.3 * g;
+        return g > 0.66 ? H[2] : g > 0.33 ? H[4] : H[5];
+      }
+      return h < 0.75 ? W[0] : W[1];
+    }
+    if (cord) return I[2];
+    return x < -1 ? W[3] : x < 1.5 ? W[2] : W[1];
+  });
+}
 
 export function draw(p, t, o) {
-  const F = fit(o.palette, 8), S = o.seed, D = meta.duration, ph = t / D;
-  const H = o.height * (0.9 + 0.1 * loopNoise(ph, 1.4, S));
-  const body = F.slice(2, 7); // dark red edge .. yellow; the palest step is kept for the base of the core
-  // the flame: a teardrop of heat, wide at the base, torn into tongues at the top by rising noise
-  p.shade(-10, -H - 8, 10, 2, (x, y) => {
-    const v = clamp(-y / H, 0, 1.4);
-    const sway = (Math.sin(ph * TAU * 2 + v * 2.4) * 0.8 + loopNoise(ph, 0.8, S + 3)) * v * v * 2.4;
-    const w = 6.4 * (v < 0.2 ? Math.sqrt(Math.max(0, 1 - ((0.2 - v) / 0.28) ** 2)) : Math.pow(Math.max(0, 1 - (v - 0.2) / 0.85), 0.7));
-    if (w <= 0.3) return;
-    const d = Math.abs(x - sway) / w;
-    const n = tileFbm(x * 0.36, y * 0.24 + ph * 12, 0, 12, S, 3);
-    const heat = (1 - Math.pow(d, 1.6)) * (1.08 - v * 0.8) + n * (0.3 + v * 0.35);
-    if (heat < 0.12) return;
-    if (heat > 1.02 && v < 0.35) return F[7];
-    return at(body, (heat - 0.12) / 0.92);
+  const F = fit(o.palette, 9), H = hotFirst(F), W = fit(o.wood, 6), I = fit(o.iron, 5), S = o.seed;
+  const fl0 = 0.74 + 0.16 * NL(t, 7.3, S + 1) + 0.1 * NL(t, 19, S + 2);
+  plate(p, I, H, fl0);
+  handle(p, W);
+  ring(p, I, H, fl0);
+  burn(p, t, TONGUES, {
+    H, D, NL, S, x: 0, y: BASE, height: 20, lean: 0.12, spread: 4,
+    puffs: 10, licks: 5, smoke: 7, smokeSize: 2.3, smokeLife: [1.3, 2.1], embers: 7, glowR: 48, glow: 1.25, wind: 2,
+    mid: () => wrap(p, W, I, H, t),
   });
-  // tongues tear off the tip and rise, shrinking and cooling
-  cycle(t, D, 4, S + 7, 0.36, (age, life, r) => {
-    const k = age / life, x = r.range(-3, 3) + Math.sin(k * 4 + r.next() * 6) * 1.6, y = -H * 0.78 - k * 11;
-    const s = (1 - k) * r.range(1.3, 2);
-    p.ellipse(x, y, s * 0.75, s * 1.5, k < 0.45 ? F[4] : F[3]);
-    if (k < 0.3) p.px(x, y, F[5]);
-  });
-  // embers: single pixels drifting up and sideways, flickering out
-  cycle(t, D, 7, S + 11, (r) => r.range(0.7, 1.2), (age, life, r) => {
-    const k = age / life, x = r.range(-4, 4) + Math.sin(age * r.range(4, 8) + r.next() * TAU) * 3 * k, y = -H * 0.55 - age * r.range(16, 28);
-    if (k > 0.5 && Math.sin(age * 38 + r.next() * 9) < -0.5) return;
-    p.px(x, y, k < 0.35 ? F[5] : k < 0.7 ? F[4] : F[3]);
-    p.light(x, y, F[4], 0.6 * (1 - k));
-  });
-  // light: a warm pool that breathes with the flame
-  const flick = 0.82 + 0.18 * loopNoise(ph, 2, S + 5);
-  p.glow(0, -H * 0.4, 28 * flick, F[4], 0.3 * flick);
-  p.glow(0, -H * 0.3, 10, F[6], 0.3 * flick);
-  if (!o.handle) return;
-  // handle: iron cup on a wooden stick
-  for (let y = 3; y < 17; y++) for (let x = -1; x <= 1; x++) p.px(x, y, WOOD[x === -1 ? 3 : x === 0 ? 2 : 1]);
-  p.px(-1, 17, WOOD[1]), p.px(0, 17, WOOD[0]);
-  for (let x = -5; x <= 5; x++) p.px(x, 0, IRON[Math.abs(x) === 5 ? 1 : x < 0 ? 3 : 2]);
-  for (let x = -4; x <= 4; x++) p.px(x, 1, IRON[x < 0 ? 2 : 1]);
-  for (let x = -3; x <= 3; x++) p.px(x, 2, IRON[1]);
-  for (let x = -2; x <= 2; x++) p.px(x, 7, IRON[x < 0 ? 2 : 1]);
 }

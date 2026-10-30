@@ -1,88 +1,152 @@
-import { ramp, at, burst, fly, seg, ease, clamp, lerp, TAU, hex } from "../../core/index.js";
+// The lumpy cloud (puffs that drift off their push, rise, swell from small to large and thin out, lit caps,
+// motes with light) is adapted from Sprite Fusion's open-source poison cloud (https://www.spritefusion.com/pixel-art-vfx/poison),
+// MIT License, Copyright (c) 2026 Hugo Duprez.
+import { Particles, Lights, P, Rng, fit, sparkle, clamp, smooth, ease, lerp, TAU, WHITE } from "../../core/index.js";
+import { Gas } from "./_lib.js";
 
 export const meta = {
   name: "Spore burst",
-  desc: "A toadstool pushes up out of the floor, squats, and puffs a cloud of glowing spores that billow up and drift down as it shrivels back into the ground.",
-  tags: ["nature", "mushroom", "fungus", "spores", "poison", "ground", "one-shot"],
-  size: [64, 60],
-  origin: [32, 52],
-  duration: 1.8,
+  desc: "A toadstool pushes up, swells and trembles as its gills glow, then squashes and puffs a lumpy cloud of glowing spores that billows up and drifts down twinkling.",
+  tags: ["nature", "mushroom", "spores", "poison", "cloud", "ground", "one-shot"],
+  size: [212, 132],
+  origin: [106, 118],
+  duration: 3.2,
   loop: false,
   fps: 30,
   bg: "ground",
-  options: { palette: ["#1e0c26", "#3a1450", "#5e1f74", "#8c2f92", "#bc4aa6", "#e47cc0", "#ffbade", "#fff2f8"], seed: 31 },
+  options: {
+    palette: ["#06141c", "#0c2a34", "#11484e", "#17706a", "#22a08a", "#4cd0a8", "#a8f4d0", "#f0fff6"],
+    cap: ["#1a0c1e", "#3a1438", "#62204e", "#8e3462", "#bc5276", "#e88a96"],
+    stem: ["#2a2230", "#5a4e5e", "#9a8e98", "#d8ccd0", "#f6eeee"],
+    seed: 9,
+  },
 };
 
-const STEM = ["#4a3c3a", "#8a7a6c", "#cbbca4", "#f0e6d0"].map(hex);
-const T_PUFF = 0.42;
+const GROW = 0.32, PUFF = 0.8, SINK = 2.15, SPOTS = [[-0.45, 0.45, 1.4], [0.1, 0.72, 1.8], [0.55, 0.38, 1.2], [-0.12, 0.25, 1], [0.3, 0.12, 0.9], [-0.7, 0.16, 0.8]];
 
-export function draw(p, t, o) {
-  const C = ramp(o.palette), S = o.seed;
-  // the toadstool: grows, squats (anticipation), springs up as it puffs, then shrivels into the floor
-  const grow = ease.outBack(seg(t, 0, 0.22), 1.6), squat = ease.inOutQuad(seg(t, 0.26, T_PUFF)), spring = seg(t, T_PUFF, T_PUFF + 0.16);
-  const shrivel = ease.inQuad(seg(t, 1.05, 1.45));
-  const sq = squat * (1 - spring) + (spring > 0 ? Math.sin(spring * Math.PI * 2.5) * (1 - spring) * -0.5 : 0);
-  const sy = grow * (1 - 0.3 * sq) * (1 - shrivel), sx = 1 + 0.35 * sq + 0.1 * shrivel;
-  if (sy > 0.05) {
-    const stemH = 9 * sy, capY = -stemH - 1, cw = 9 * sx * Math.min(1, grow + 0.2), ch = 6 * sy;
-    // stem: pale, shaded right, a frill under the cap
-    p.shade(-2.5 * sx, capY, 2.5 * sx, 0, (x) => (x < -1.2 * sx ? STEM[3] : x < 0.6 * sx ? STEM[2] : STEM[1]));
-    if (stemH > 4) p.line(-3 * sx, capY + 2, 3 * sx, capY + 2, STEM[1]);
-    // cap: a dome lit from the top left, dark rim underneath, pale spots
-    p.shade(-cw - 1, capY - ch - 1, cw + 1, capY + 1.5, (x, y) => {
-      const dx = x / cw, dy = (y - capY) / ch;
-      if (dy > 0.25) return dx * dx < 1 - (dy - 0.25) * 2 && Math.abs(dx) < 0.95 ? C[1] : undefined;
-      if (dx * dx + dy * dy > 1) return;
-      const lit = -dx * 0.6 - dy;
-      return lit > 0.75 ? C[6] : lit > 0.25 ? C[5] : lit > -0.25 ? C[4] : C[3];
-    });
-    if (cw > 4) {
-      p.px(-cw * 0.45, capY - ch * 0.55, STEM[3]), p.px(-cw * 0.45 + 1, capY - ch * 0.55, STEM[3]);
-      p.px(cw * 0.25, capY - ch * 0.75, STEM[3]);
-      p.px(cw * 0.6, capY - ch * 0.3, STEM[2]);
+// the toadstool at its current squash: a stem with a frilled ring, a domed cap lit from the upper left with
+// pale spots, glowing gills beneath it
+function toadstool(p, K, Sm, Cs, g, sx, sy, glow, sink) {
+  const H = 17 * g, cw = 17 * sx * g, ch = 13 * sy * g, base = sink, top = base - H;
+  if (g < 0.05) return;
+  // stem
+  for (let y = Math.floor(top); y <= Math.min(0, base); y++)
+    for (let x = -4; x <= 4; x++) {
+      const w = 3 + ((y - top) / H) * 1;
+      if (Math.abs(x + 0.5) > w) continue;
+      const q = (x + 0.5 + w) / (2 * w);
+      p.px(x, y, Math.abs(x + 0.5) > w - 0.8 ? Sm[1] : q < 0.4 ? Sm[4] : q < 0.7 ? Sm[3] : Sm[2]);
     }
-  }
-  const a = t - T_PUFF;
-  if (a < 0) return;
-  const top = -9 * (1 - 0.3) - 8;
-  // the puff: a white burst off the cap for two frames
-  if (a < 0.07) {
-    p.ellipse(0, top - 2, 9, 5, (d) => (d < 0.5 ? C[7] : C[6]));
-    p.glow(0, top, 30, C[5], 0.5);
-  }
-  // the cloud: clumps of spore dust that billow up and out as one lumpy mass, then shrink away darkening
-  const puffs = [];
-  burst(11, S, (r) => {
-    const life = r.range(0.7, 1), q = a / life;
-    if (q >= 1) return;
-    const ang = -Math.PI / 2 + r.range(-1.1, 1.1), sp = r.range(10, 26), e = ease.outCubic(Math.min(1, q * 1.6));
-    const x = Math.cos(ang) * sp * e, y = top - 2 + Math.sin(ang) * sp * 0.8 * e - q * 6;
-    const rad = r.range(3.5, 6) * (0.6 + 0.6 * e) * (1 - ease.inQuad(q) * 0.95);
-    if (rad > 0.7) puffs.push({ x, y, r: rad, q });
+  const ring = top + H * 0.3;
+  if (ring <= 0) for (let x = -5; x <= 5; x++) p.px(x, ring + (Math.abs(x) > 3 ? 1 : 0), Math.abs(x) > 4 ? Sm[1] : Sm[3]);
+  // gills: a glowing underside
+  const gy = top + 1;
+  if (gy <= 0)
+    for (let x = Math.floor(-cw); x <= Math.ceil(cw); x++) {
+      const d = Math.abs(x + 0.5) / cw;
+      if (d > 0.95) continue;
+      p.px(x, gy, d < 0.3 ? Cs[0] : (x & 1) ? Sm[2] : Sm[3]);
+      if (glow > 0.05) p.px(x, gy, glow > 0.6 && (x & 1) ? K[7] : K[5]);
+    }
+  if (glow > 0.05) p.glow(0, gy + 2, cw * 1.5 + 6, K[5], 0.5 * glow);
+  // the cap: a dome with a curled lip
+  p.shade(-cw - 1, top - ch - 1, cw + 1, top + 1, (x, y, out) => {
+    const dx = x / cw, dy = (top - y) / ch, d = dx * dx + dy * dy;
+    if (dy < -0.12 || d > 1.12 || y > 0) return;
+    if (d > 1) return (out.c = Cs[0]);
+    let i = dx < -0.35 && dy > 0.45 ? 5 : dx < 0.05 && dy > 0.3 ? 4 : dy < 0.18 ? 2 : dx > 0.55 ? 2 : 3;
+    for (const [sx0, sy0, r] of SPOTS) {
+      const ex = (dx - sx0) * cw, ey = (dy - sy0) * ch;
+      if (ex * ex + ey * ey * 1.6 < r * r * g * g) i = ex < 0 && ey > 0 ? 9 : 8;
+    }
+    out.c = i === 9 ? Sm[4] : i === 8 ? Sm[3] : Cs[i];
   });
-  if (puffs.length) {
-    p.shade(-30, -56, 30, -4, (x, y) => {
-      let best = 0, lit = 0, q = 0;
-      for (const f of puffs) {
-        const dx = x - f.x, dy = y - f.y, v = 1 - (dx * dx + dy * dy) / (f.r * f.r);
-        if (v > best) (best = v), (lit = (-dx * 0.6 - dy) / f.r), (q = f.q);
+  p.px(-cw * 0.45, top - ch * 0.8, Cs[5]);
+}
+
+export function create(o) {
+  const K = fit(o.palette, 8), Cs = fit(o.cap, 6), Sm = fit(o.stem, 5), R = new Rng(o.seed), floor = () => 0;
+  const ps = new Particles({ rng: R, ground: floor, sparks: [K[7], K[6], K[5], K[4]], haze: K[5] });
+  const gas = new Gas(), lights = new Lights();
+  let t = 0, puffed = false, grown = false;
+  const g = () => ease.outBack(clamp(t / GROW), 1.6) * (1 - ease.inCubic(clamp((t - SINK) / 0.45)));
+  const charge = () => smooth(GROW, PUFF, t);
+  // squash and stretch: it swells as it charges, squashes flat as it puffs, springs back
+  const shape = () => {
+    if (t < PUFF) {
+      const k = charge(), j = Math.sin(t * 70) * 0.04 * k;
+      return [1 + 0.28 * k + j, 1 + 0.22 * k - j];
+    }
+    const e = t - PUFF, sp = Math.exp(-e * 7) * Math.cos(e * 26);
+    return [1 + 0.25 * sp, 1 - 0.35 * sp];
+  };
+  return {
+    update(dt) {
+      t += dt;
+      const f = Math.min(1, dt * 120);
+      if (!grown) {
+        grown = true;
+        for (let i = 0; i < 10; i++) ps.spawn(P.GRIT, R.range(-4, 4), -1, R.range(-50, 50), -R.range(40, 120), R.range(0.5, 0.8), R.pick([Sm[1], Sm[2]]), 1);
+        for (let i = 0; i < 4; i++) ps.spawn(P.DUST, R.range(-4, 4), -1, R.sign() * R.range(10, 40), -R.range(4, 12), R.range(0.4, 0.7), Sm[1], R.range(2, 3));
       }
-      if (best <= 0) return;
-      // fresh dust is bright; it dulls as it ages
-      return at(C.slice(2, 8), 0.3 + lit * 0.32 + best * 0.2 - q * 0.45);
-    });
-  }
-  // spores: glowing specks shot up and out, then drifting down, swaying, twinkling out
-  burst(26, S + 1, (r) => {
-    const life = r.range(0.9, 1.3), age = a - r.range(0, 0.08);
-    if (age < 0 || age > life) return;
-    const k = age / life, ang = -Math.PI / 2 + r.range(-1.25, 1.25), sp = r.range(30, 72);
-    let [x, y] = fly(0, top - 1, Math.cos(ang) * sp, Math.sin(ang) * sp, age, 22, 3.2);
-    x += Math.sin(age * r.range(5, 8) + r.next() * TAU) * 2 * k;
-    if (k > 0.6 && Math.sin(age * 40 + r.next() * 9) < -0.4) return;
-    p.px(x, y, k < 0.4 ? C[7] : k < 0.75 ? C[6] : C[5]);
-    p.light(x, y, C[5], 0.5 * (1 - k));
-  });
-  const L = 1 - seg(a, 0, 0.6);
-  p.glow(0, top - 6, 28, C[4], 0.3 * L * L);
+      // charging: spores gather toward the gills
+      if (t > GROW && t < PUFF - 0.05 && R.chance(0.25 * f)) {
+        const a = R.range(Math.PI * 1.05, Math.PI * 1.95), d = R.range(20, 38), x = Math.cos(a) * d, y = -18 + Math.sin(a) * d * 0.7;
+        ps.spawn(P.STREAK, x, y, -x * 3, (-18 - y) * 3, R.range(0.2, 0.3), K[6]);
+      }
+      if (!puffed && t >= PUFF) {
+        puffed = true;
+        lights.add(0, -22, 30, WHITE, 0.6, 0.1);
+        lights.add(0, -28, 70, K[5], 0.55, 0.9);
+        // the cloud: lumps shoved up and out from under the cap, swelling as they go
+        for (let i = 0; i < 30; i++) {
+          const a = -Math.PI / 2 + R.range(-1.1, 1.1), sp = R.range(15, 95);
+          gas.add(t, R.range(-8, 8), -20 + R.range(-3, 3), Math.cos(a) * sp * 1.3, Math.sin(a) * sp - 10, R.range(3, 5), R.range(8, 14), t + R.range(1.6, 2.2), R.range(5, 10));
+        }
+        for (let i = 0; i < 6; i++) {
+          const sd = R.sign();
+          gas.add(t, sd * R.range(6, 12), -5, sd * R.range(30, 70), -R.range(2, 14), R.range(2, 3), R.range(4, 6), t + R.range(0.8, 1.1), R.range(4, 8));
+        }
+        for (let i = 0; i < 40; i++) {
+          const a = -Math.PI / 2 + R.range(-1.4, 1.4), sp = R.range(40, 160);
+          const mote = R.chance(0.5), k = mote ? 0.35 : 0.7;
+          ps.spawn(mote ? P.MOTE : P.FLAKE, R.range(-5, 5), -20, Math.cos(a) * sp * k, Math.sin(a) * sp * k, R.range(1, 2), R.pick([K[7], K[6], K[6], K[5]]), R.range(0.6, 1.6));
+        }
+        for (let i = 0; i < 6; i++) ps.spawn(P.STAR, R.range(-20, 20), -R.range(12, 40), 0, -6, R.range(0.3, 0.6), K[7], R.range(1, 2.4), R.range(0.05, 0.4));
+        for (let i = 0; i < 8; i++) ps.spawn(P.DUST, R.sign() * R.range(4, 10), -1, R.sign() * R.range(30, 90), -R.range(2, 10), R.range(0.5, 0.9), K[3], R.range(2, 3.5));
+      }
+      // after it: spores keep drifting down out of the cloud, twinkling
+      if (puffed && t < 2.6 && R.chance(0.12 * f)) ps.spawn(P.FLAKE, R.range(-40, 40), -R.range(30, 70), R.range(-8, 8), R.range(4, 14), Math.min(R.range(0.9, 1.5), meta.duration - 0.05 - t), R.chance(0.5) ? K[7] : K[6], R.range(0.6, 1.5));
+      if (t > SINK && t < SINK + 0.4 && R.chance(0.15 * f)) ps.spawn(P.DUST, R.range(-5, 5), -1, R.sign() * R.range(10, 30), -R.range(2, 8), R.range(0.3, 0.5), Sm[1], R.range(1.5, 2.5));
+      gas.prune(t);
+      ps.update(dt);
+      lights.update(dt);
+    },
+    drawBack(p) {
+      // a ring of glow on the floor round it while it charges and puffs
+      const k = charge() * (1 - smooth(PUFF + 0.2, PUFF + 1.2, t));
+      if (k > 0) for (let x = -20; x <= 20; x++) p.dot(x, 0, Math.abs(x) < 10 ? K[5] : K[4], k * (1 - Math.abs(x) / 21));
+      p.glow(0, -2, 30, K[4], 0.25 * k);
+      ps.draw(p, "back");
+    },
+    draw(p) {
+      const [sx, sy] = shape(), gl = t < PUFF ? charge() * (0.75 + 0.25 * Math.sin(t * (20 + 30 * charge()))) : Math.max(0, 1 - (t - PUFF) * 1.5);
+      toadstool(p, K, Sm, Cs, g(), sx, sy, gl, ease.inCubic(clamp((t - SINK) / 0.45)) * 20);
+      // the cloud: teal lumps lit along their tops, a cool light through them
+      gas.draw(p, t, K[2], K[4], K[6], K[7], 0.62, K[6]);
+      // the cloud glows from within: a soft light riding its middle
+      if (gas.list.length) {
+        let cx = 0, cy = 0, n = 0;
+        for (const q of gas.list) {
+          const g2 = gas.at(q, t);
+          (cx += g2.x * g2.a), (cy += g2.y * g2.a), (n += g2.a);
+        }
+        if (n > 0.2) p.glow(cx / n, cy / n, 46, K[5], Math.min(0.32, 0.03 * n));
+      }
+      const e = t - PUFF;
+      if (e > 0 && e < 0.1) sparkle(p, 0, -20, 10 * (1 - e / 0.1), K[7], K[6], 0.6);
+      ps.draw(p, "front");
+      lights.draw(p);
+    },
+  };
 }

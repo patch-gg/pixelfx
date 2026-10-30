@@ -1,62 +1,131 @@
-import { ramp, at, burst, seg, ease, clamp, smooth, WHITE } from "../../core/index.js";
+// The crescent and trace recipe is adapted from Sprite Fusion's open-source slash, and the vapour from his
+// ice and poison (https://www.spritefusion.com/pixel-art-vfx), MIT License, Copyright (c) 2026 Hugo Duprez.
+import { Particles, Lights, P, PF, Rng, fit, sparkle, clamp, smooth, ease, rand, WHITE } from "../../core/index.js";
+import { swing, onSwing, travel, smear, glowAlong } from "./_lib.js";
 
 export const meta = {
   name: "Scythe reap",
-  desc: "A slow, huge reap: a dark crescent with a pale ghostly edge hangs in the air a beat, then tears away and leaves its ghost to rise, waver and fade.",
-  tags: ["melee", "slash", "scythe", "reaper", "dark", "ghost", "shadow", "combat", "directional", "one-shot"],
-  size: [72, 68],
-  origin: [22, 56],
-  duration: 0.9,
+  desc: "A slow, huge dark crescent reaps round the front with a pale ghostly edge; it hangs, then tears away from the tail into curling wisps and cold vapour.",
+  tags: ["melee", "scythe", "reap", "dark", "ghost", "death", "slash", "combat", "one-shot"],
+  size: [184, 116],
+  origin: [84, 98],
+  duration: 2.1,
   loop: false,
   fps: 30,
   bg: "ground",
-  actor: true,
-  options: { palette: ["#05030a", "#120a1e", "#24123a", "#3a1e5a", "#5a3a80", "#8a7ab0", "#bfe8d8", "#effff8"], radius: 30, seed: 13 },
+  actor: 2,
+  options: {
+    palette: ["#07040c", "#140a22", "#24113a", "#3b1d58", "#5a3a82", "#7fd6c0", "#d8fff2", "#ffffff"],
+    seed: 13,
+  },
 };
 
-export function draw(p, t, o) {
-  const C = ramp(o.palette), R = o.radius, S = o.seed, top = C.length - 1;
-  const cx = -2, cy = -10, A0 = -1.75, A1 = Math.asin(clamp((-1 - cy) / R)); // from overhead round to the floor in front
-  const lead = ease.outCubic(seg(t + 0.02, 0, 0.17)), tail = ease.inQuad(seg(t, 0.14, 0.5));
-  const la = A0 + (A1 - A0) * lead, ta = A0 + (A1 - A0) * tail, W = 11, tear = seg(t, 0.18, 0.55);
-  if (la - ta > 0.02) {
-    // the crescent: dark body, a pale edge on the outside, thickest a little behind the blade; as it tears away
-    // the body goes first and the ghostly edge lingers
-    p.arc(cx, cy, R, (u) => W * Math.pow(u, 0.5) * (u > 0.9 ? (1 - u) / 0.1 : 1) + 1, ta, la,
-      (u, v) => (v > 0.86 ? (u > 0.5 ? C[top] : C[top - 1]) : v > 0.72 ? C[top - 2] : at(C.slice(1, top - 2), v * 0.85 + u * 0.3)),
-      (u, v) => clamp(smooth(0, 0.3, u) * 1.5) * clamp(1.4 - (1 - u * 0.7) * tear * (v > 0.72 ? 1.6 : 3)));
-    const ex = cx + Math.cos(la) * (R - 3), ey = cy + Math.sin(la) * (R - 3);
-    p.glow(ex, ey, 16, C[top - 2], 0.3 * (1 - seg(t, 0.15, 0.5)));
-    p.glow(cx + Math.cos((la + ta) / 2) * R * 0.85, cy + Math.sin((la + ta) / 2) * R * 0.85, 26, C[top - 3], 0.22 * (1 - seg(t, 0.2, 0.55)));
-  }
-  // its ghost: where the crescent tore away, a pale copy of it lingers, rising and wavering, thinning from below
-  const g = seg(t, 0.2, 0.32) * (1 - seg(t, 0.5, 0.86));
-  if (g > 0) {
-    const rise = 14 * ease.outQuad(seg(t, 0.2, 0.86)), wob = 0.6 + 2.2 * seg(t, 0.2, 0.86), ph = t * 14;
-    const span = A1 - A0, x0 = cx - R - 4, x1 = cx + R + 4, y0 = cy - R - rise - 2, y1 = cy + R * Math.sin(A1) + 2 - rise;
-    p.shade(x0, y0, x1, y1, (x, y, out) => {
-      const sy = y + rise, sx = x - Math.sin(sy * 0.45 + ph) * wob, dx = sx - cx, dy = sy - cy, d = Math.sqrt(dx * dx + dy * dy);
-      if (d > R || d < R - 7) return;
-      let a = Math.atan2(dy, dx) - A0;
-      a -= Math.floor(a / 6.283185) * 6.283185;
-      const u = a / span;
-      if (u > 1) return;
-      const w = 7 * Math.pow(u, 0.5) * (u > 0.9 ? (1 - u) / 0.1 : 1) + 1, v = (d - (R - w)) / w;
-      if (v < 0) return;
-      out.c = v > 0.8 ? C[top - 1] : C[top - 2];
-      out.a = g * (v > 0.8 ? 0.95 : 0.4) * clamp(1.6 - (sy - (cy - R)) / (R * 1.4) * (1 - g) * 2.4);
-      out.k = 0.12 * g;
-    });
-  }
-  // a few souls slip out of it and float up
-  burst(6, S, (r, i) => {
-    const u = (i + r.range(0.2, 0.8)) / 6, ang = A0 + (A1 - A0) * u;
-    const born = 0.2 + 0.25 * Math.sqrt(u) + r.range(0, 0.05), age = t - born, life = r.range(0.28, 0.38);
-    if (age < 0 || age > life) return;
-    const k = age / life, x = cx + Math.cos(ang) * (R - 2) + Math.sin(age * 10 + i) * 2, y = cy + Math.sin(ang) * (R - 2) - age * r.range(30, 46);
-    p.dot(x, y, k < 0.5 ? C[top] : C[top - 1], clamp((1 - k) * 2.2));
-    p.dot(x, y + 1, C[top - 1], clamp((1 - k) * 1.6));
-    p.dot(x, y + 2, C[top - 2], clamp((1 - k) * 1.2));
-    p.light(x, y, C[top - 1], 0.3 * (1 - k));
-  });
+const WIND = 0.08, SWEEP = 0.34, HANG = 0.14, TEAR = 0.55;
+const T0 = WIND, T1 = WIND + SWEEP, T2 = T1 + HANG, T3 = T2 + TEAR;
+const head = (t) => ease.inOutSine(clamp((t - T0) / SWEEP));
+
+export function create(o) {
+  const C = fit(o.palette, 8), Rg = new Rng(o.seed), ps = new Particles({ rng: Rg, ground: () => 0, haze: C[5] }), lights = new Lights();
+  // a wide reap from out on the right, round the front of the fighter, to the left
+  const A = swing({ cx: 8, cy: -33, R: 52, sy: 0.6, k: 0.1, rot: 0.08, a0: -0.5, dir: 1, span: 3.5 });
+  const W = 21;
+  const wisps = [];
+  let t = 0, lastTear = 0;
+  // how far the tear has eaten in from the tail (0..1 of the span), ragged by a per-pixel threshold
+  const tear = () => smooth(T2, T3, t);
+  const addWisp = (x, y, far) => wisps.push({ x, y, vx: Rg.range(-12, 12), vy: -Rg.range(8, 26), life: Rg.range(0.5, 0.9), max: 0, seed: Rg.range(0, 100), pts: [], far });
+  return {
+    update(dt) {
+      t += dt;
+      // the cold gathers on the blade before it moves
+      if (t < WIND && Rg.chance(0.5)) {
+        const [x, y] = onSwing(A, A.R - 4, 0);
+        ps.spawn(P.VAPOUR, x + Rg.range(-14, 14), y + Rg.range(-8, 8), Rg.range(-10, 10), Rg.range(-6, 6), Rg.range(0.3, 0.5), C[5], Rg.range(1.5, 2.5));
+      }
+      // the edge sheds a little vapour as it goes
+      if (t > T0 && t < T1 && Rg.chance(0.5)) {
+        const tr = travel(A, A.span * head(t) * Rg.range(0.75, 1));
+        ps.spawn(P.VAPOUR, tr.x, tr.y, tr.dx * 20, -Rg.range(4, 14), Rg.range(0.5, 0.9), C[6], Rg.range(2, 3.5), 0, Math.sin(tr.a) < 0 ? PF.BACK : 0);
+      }
+      // tearing away: wisps peel off where the crescent is coming apart
+      const k = tear();
+      for (let u = lastTear; u < k * 1.15; u += 0.022) {
+        const uu = Math.min(1, u) * A.span, tr = travel({ ...A, R: A.R - Rg.range(0, 8) }, uu), far = Math.sin(tr.a) < 0;
+        addWisp(tr.x, tr.y, far);
+        if (Rg.chance(0.5)) ps.spawn(P.VAPOUR, tr.x, tr.y, Rg.range(-10, 10), -Rg.range(6, 18), Rg.range(0.55, 0.85), Rg.chance(0.5) ? C[5] : C[4], Rg.range(2.5, 4.5), 0, far ? PF.BACK : 0);
+        if (Rg.chance(0.2)) ps.spawn(P.STAR, tr.x + Rg.range(-3, 3), tr.y + Rg.range(-3, 3), 0, -6, Rg.range(0.25, 0.5), Rg.chance(0.5) ? C[6] : WHITE, Rg.range(0.6, 1.6), 0, far ? PF.BACK : 0);
+      }
+      lastTear = Math.max(lastTear, k * 1.15);
+      // wisps rise, sway and curl, leaving a fading thread behind them
+      for (let i = wisps.length - 1; i >= 0; i--) {
+        const w = wisps[i];
+        w.max += dt;
+        if (w.max > w.life) {
+          wisps.splice(i, 1);
+          continue;
+        }
+        w.vy -= 30 * dt;
+        w.vx += Math.sin(w.max * 9 + w.seed) * 120 * dt;
+        w.vx -= w.vx * 2 * dt;
+        w.vy -= w.vy * 1.2 * dt;
+        w.x += w.vx * dt;
+        w.y += w.vy * dt;
+        w.pts.push([w.x, w.y]);
+        if (w.pts.length > 14) w.pts.shift();
+      }
+      ps.update(dt);
+      lights.update(dt);
+    },
+    drawBack(p) {
+      this.blade(p, -1);
+      ps.draw(p, "back");
+      this.threads(p, true);
+    },
+    draw(p) {
+      this.blade(p, 1);
+      // the blade's point glints cold as it sets off and where it stops
+      if (t < WIND + 0.05) {
+        const [x, y] = onSwing(A, A.R - 3, 0);
+        sparkle(p, x, y, 6 * Math.min(1, t / 0.04) * (1 - smooth(WIND - 0.02, WIND + 0.05, t)), C[6], C[5], 0.45);
+      }
+      const g = t - T1 + 0.06;
+      if (g > 0 && g < 0.3) {
+        const [x, y] = onSwing(A, A.R - 3, A.span);
+        sparkle(p, x, y, 9 * ease.outBack(Math.min(1, g / 0.06)) * (1 - g / 0.3), C[6], C[5], 0.55);
+      }
+      ps.draw(p, "front");
+      this.threads(p, false);
+      lights.draw(p);
+    },
+    blade(p, half) {
+      const U = A.span * head(t), k = tear();
+      if (U < 0.02 || k >= 1) return;
+      const ramp = half < 0 ? [C[0], C[0], C[1], C[2], C[3], C[4], C[5], C[6]] : C;
+      smear(p, A, 0, U, W, (u, r, out, a) => {
+        const v = u / U, w = W * Math.pow(Math.sin(Math.PI * Math.pow(v, 1.7)), 0.55);
+        if (w < 0.5) return;
+        const q = (A.R - r) / w;
+        if (q < 0 || q > 1) return;
+        // torn away from the tail: a ragged front of per-pixel thresholds
+        const n = rand(Math.floor(u * 40), Math.floor(r), 7);
+        if (k > 0 && (u / A.span) < k * 1.2 - n * 0.2) return;
+        // a pale ghostly rim, a dark body that deepens inward, a faint lit seam
+        const ci = q < 0.08 ? 7 : q < 0.16 ? 6 : q < 0.25 ? 5 : q < 0.4 ? 4 : q < 0.62 ? 3 : 2;
+        out.c = ramp[t > T1 && q < 0.2 ? ci - 1 : ci];
+        out.a = Math.min(1, v / 0.25);
+      }, half);
+      glowAlong(p, A, A.R - 2, Math.max(0, k * 1.2 * A.span - 0.3), U, 14, C[5], (u) => 0.3 * (u / U), half, 0.25);
+    },
+    threads(p, back) {
+      for (const w of wisps) {
+        if (w.far !== back) continue;
+        const life = 1 - w.max / w.life;
+        for (let i = 1; i < w.pts.length; i++) {
+          const f = i / w.pts.length;
+          p.line(w.pts[i - 1][0], w.pts[i - 1][1], w.pts[i][0], w.pts[i][1], f > 0.75 ? C[6] : f > 0.4 ? C[5] : C[3], life * (0.3 + 0.7 * f));
+        }
+        if (life > 0.5) p.glow(w.x, w.y, 5, C[5], 0.25 * life);
+      }
+    },
+  };
 }

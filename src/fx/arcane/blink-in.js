@@ -1,70 +1,123 @@
-import { PAL, burst, cycle, seg, ease, clamp, stockActor, TAU, WHITE } from "../../core/index.js";
-import { fit, silhouette, sparkle } from "./_lib.js";
+// The arrival (bits converging, a line of light that opens into the silhouette, a ring on the floor, a burst of
+// stars) is adapted from Sprite Fusion's open-source blink (https://www.spritefusion.com/pixel-art-vfx/movement),
+// MIT License, Copyright (c) 2026 Hugo Duprez.
+import { Particles, Lights, P, Rng, PAL, fit, band, flare, sparkle, clamp, ease, rand, TAU, WHITE } from "../../core/index.js";
+import { shades, squeezed } from "./_lib.js";
+
+const LINE = 0.26, GROW = 0.1, OPEN = 0.12, ARRIVE = LINE + GROW + OPEN;
 
 export const meta = {
   name: "Blink in",
-  desc: "Teleport arrival: sparks rush to a point, a star pops, a line of light stretches and springs open into the body, the glow drains away.",
-  tags: ["arcane", "teleport", "blink", "appear", "magic", "character", "one-shot"],
-  size: [48, 56],
-  origin: [24, 44],
-  duration: 0.8,
+  desc: "Glittering bits spiral in to a point of light that opens into a line, then into a white silhouette that cools into the caster.",
+  tags: ["arcane", "blink", "teleport", "appear", "movement", "magic", "one-shot"],
+  size: [136, 96],
+  origin: [68, 80],
+  duration: 1.4,
   loop: false,
   fps: 30,
   bg: "ground",
-  actor: false,
-  options: { palette: PAL.arcane, seed: 13 },
+  actor: 2,
+  options: { palette: PAL.arcane, seed: 12 },
 };
 
-export function draw(p, t, o) {
-  const C = fit(o.palette), A = o.actor ?? stockActor(), S = o.seed, cy = -A.h * 0.6, mid = (A.w - 1) / 2;
-  // 1. sparks rush in to a point, faster and faster
-  burst(10, S, (r) => {
-    const t0 = r.range(0, 0.06), k = seg(t, t0, 0.16);
-    if (t < t0 || k >= 1) return;
-    const ang = r.range(0, TAU), R = r.range(14, 20) * (1 - ease.inQuad(k)), R2 = r.range(14, 20) * (1 - ease.inQuad(Math.max(0, k - 0.15)));
-    const x = Math.cos(ang) * R - 0.5, y = cy + Math.sin(ang) * R;
-    p.line(Math.cos(ang) * R2 - 0.5, cy + Math.sin(ang) * R2, x, y, k > 0.5 ? C[6] : C[5]);
-    p.light(x, y, C[5], 0.4);
+/** The stand-in character appears once the silhouette has opened. */
+export const actorAlpha = (t) => (t < ARRIVE ? 0 : 1);
+
+export function create(o) {
+  const C = fit(o.palette, 8), R = new Rng(o.seed), A = o.actor, sh = shades(A);
+  const ps = new Particles({ rng: R, ground: () => 0, sparks: [WHITE, C[6], C[5], C[4]] }), lights = new Lights();
+  const mx = A.x + A.w / 2, my = A.y + A.h * 0.55, COLS = [WHITE, C[6], C[6], C[5], C[4]];
+  const inside = (x, y) => x >= 0 && y >= 0 && x < A.w && y < A.h && A.mask.data[y * A.w + x];
+  // the bits: each spirals in from its own spot to a point on the line, arriving as the line forms
+  const bits = Array.from({ length: 230 }, () => {
+    const a = R.range(0, TAU), d = R.range(16, 46), ty = A.y + R.range(3, A.h - 2);
+    let oy = Math.sin(a) * d * 0.8 - 6;
+    if (ty + oy > -2) oy = -Math.abs(oy) - 2; // none start under the floor
+    return { tx: mx + R.range(-1, 1), ty, ox: Math.cos(a) * d, oy, t0: R.range(0, 0.1), t1: LINE + R.range(-0.02, GROW), spin: R.range(0.8, 1.8) * R.sign(), c: R.pick(COLS) };
   });
-  // 2. the star at the meeting point
-  const a = t - 0.16;
-  if (a >= 0 && a < 0.08) {
-    p.line(-9, cy, 8, cy, C[6]);
-    p.line(-0.5, cy - 10, -0.5, cy + 9, C[6]);
-    sparkle(p, -0.5, cy, 3, WHITE, C[6], WHITE);
-    p.glow(0, cy, 22, C[5], 0.6);
-  }
-  // 3. a line of light stretches from the star to full height (taller than the body)
-  const grow = ease.outCubic(seg(t, 0.18, 0.26)), open = seg(t, 0.26, 0.42), drain = seg(t, 0.44, 0.66);
-  const H0 = A.h * 1.4;
-  if (grow > 0 && open === 0) {
-    const top = cy + (-H0 - cy) * grow, bot = cy * (1 - grow);
-    p.line(-0.5, top, -0.5, bot, WHITE);
-    if (grow > 0.6) {
-      p.line(-1.5, top + 3, -1.5, bot - 2, C[6]);
-      p.line(0.5, top + 3, 0.5, bot - 2, C[5]);
-    }
-    p.glowLine(0, top, 0, bot, 8, C[5], 0.45);
-  }
-  // 4. the body springs open from the line, overshoots wide and settles, then its glow drains top to bottom
-  if (open > 0 && t < meta.duration) {
-    const sx = 0.06 + 0.94 * ease.outBack(open, 2.2), sy = 1.4 - 0.4 * ease.outCubic(open) + 0.06 * Math.sin(seg(t, 0.38, 0.5) * Math.PI);
-    const row = (A.h + 3) * ease.inOutSine(drain) - 1, out = seg(t, 0.62, 0.76);
-    silhouette(p, A, Math.max(0.06, sx), sy, (mx, my, base) => {
-      if (drain > 0 && my <= row - 2) return base || 0; // revealed (custom actors: leave it to the game's sprite)
-      if (drain > 0 && my <= row) return WHITE; // the drain's leading edge
-      const side = Math.abs(mx - mid) / (mid + 0.5);
-      return side < 0.7 - open * 0.5 ? WHITE : side < 0.8 ? C[6] : C[5];
-    });
-    if (drain > 0.3 && out < 1 && Math.floor(t * 30) % 2 === 0) p.outline(A.mask, A.x, A.y, C[5], 1 - out);
-    p.glow(0, cy, 18, C[4], 0.35 * (1 - drain));
-  }
-  // motes left floating as it settles
-  cycle(t, 10, 6, S + 5, 0.4, (age, life, r) => {
-    const born = 0.3 + r.range(0, 0.15), q = (t - born) / life;
-    if (q < 0 || q >= 1) return;
-    const x = r.range(-8, 8), y = cy + r.range(-8, 10) - (t - born) * r.range(14, 26);
-    p.px(x, y, q < 0.5 ? C[6] : C[5]);
-  });
-  if (a >= 0) p.glow(0, cy, 12, C[4], 0.3 * clamp(1 - (a - 0.1) / 0.4));
+  let t = 0, arrived = false;
+  const at = (b, tt) => {
+    const k = clamp((tt - b.t0) / (b.t1 - b.t0)), e = ease.outCubic(k), r = 1 - e, sp = b.spin * r * 1.2;
+    const ox = b.ox * Math.cos(sp) - b.oy * Math.sin(sp), oy = b.ox * Math.sin(sp) + b.oy * Math.cos(sp);
+    return [b.tx + ox * r, Math.min(-1, b.ty + oy * r), k];
+  };
+
+  return {
+    update(dt) {
+      t += dt;
+      if (t < LINE && R.chance(0.6)) {
+        const a = R.range(0, TAU), D = R.range(22, 44), T = R.range(0.12, 0.18), v = (D * 3) / (Math.exp(3 * T) - 1);
+        const x = mx + Math.cos(a) * D, y = Math.min(-2, my + Math.sin(a) * D), l = Math.hypot(x - mx, y - my) || 1;
+        ps.spawn(P.STREAK, x, y, ((mx - x) / l) * v, ((my - y) / l) * v, T, R.chance(0.5) ? C[6] : C[5]);
+      }
+      if (!arrived && t >= ARRIVE) {
+        arrived = true;
+        lights.add(mx, my - 6, 56, C[5], 0.9, 0.35);
+        lights.add(mx, my, 24, WHITE, 0.8, 0.1);
+        for (let i = 0; i < 30; i++) {
+          const a = R.range(0, TAU), sp = R.range(35, 110);
+          ps.spawn(R.chance(0.6) ? P.STAR : P.MOTE, mx, my, Math.cos(a) * sp, Math.sin(a) * sp * 0.7 - 30, R.range(0.4, 0.85), R.pick(COLS), R.range(0.6, 1.6));
+        }
+        for (let i = 0; i < 12; i++) {
+          const s = R.sign();
+          ps.spawn(P.SPARK, mx + s * R.range(2, 8), -1, s * R.range(60, 180), -R.range(20, 110), R.range(0.2, 0.45));
+        }
+      }
+      ps.update(dt);
+      lights.update(dt);
+    },
+    drawBack(p) {
+      const k = (t - ARRIVE + 0.03) / 0.5;
+      if (k >= 0 && k < 1) band(p, 0, 0, 4 + 30 * ease.outCubic(k), 0.2, Math.max(1, 3 * (1 - k)), 1.15 - k, [C[3], C[5], C[6], WHITE], (g) => Math.sin(g) < 0, k < 0.25);
+      p.glow(0, -1, 26, C[5], 0.3 * (t < ARRIVE ? t / ARRIVE : 1 - clamp((t - ARRIVE) / 0.5)));
+    },
+    draw(p) {
+      // the bits rushing in, streaking as they speed up, white as they land
+      for (const b of bits) {
+        if (t < b.t0 || t > b.t1 + 0.02) continue;
+        const [x, y, k] = at(b, t);
+        p.dot(x, y, k > 0.75 ? WHITE : b.c, Math.min(1, 0.35 + k * 2));
+        // a short tail once they're rushing
+        if (k > 0.55) {
+          const [px, py] = at(b, t - 0.015);
+          p.dot((x + px) / 2, (y + py) / 2, C[5], 0.8);
+        }
+        if (k > 0.8) p.glow(x, y, 3, C[6], 0.3);
+      }
+      if (t >= LINE - 0.04 && t < LINE) {
+        // a point of light where it gathers
+        const q = (t - LINE + 0.04) / 0.04;
+        sparkle(p, mx, my, 2 + 3 * q, C[6], C[5], 0.6);
+      } else if (t >= LINE && t < LINE + GROW) {
+        // it opens into a line, top to bottom
+        const q = ease.outCubic((t - LINE) / GROW), hh = (A.h / 2 + 3) * q;
+        for (let y = -hh - 2; y <= hh + 2; y++) p.dot(mx, my + y, Math.abs(y) < hh ? WHITE : C[6], Math.abs(y) < hh ? 1 : 0.7);
+        for (let y = -hh * 0.7; y <= hh * 0.7; y++) (p.dot(mx - 1, my + y, C[5], 0.6), p.dot(mx + 1, my + y, C[5], 0.6));
+        p.glow(mx, my, 30, C[5], 0.9);
+        p.glow(mx, my, 8, WHITE, 0.5);
+      } else if (t >= LINE + GROW && t < ARRIVE) {
+        // the line opens sideways into the silhouette, white hot
+        const q = ease.outCubic((t - LINE - GROW) / OPEN);
+        squeezed(p, A, sh, q, WHITE, C[6]);
+        p.glow(mx, my, 36, C[5], 0.8);
+      } else if (t >= ARRIVE && t < ARRIVE + 0.42) {
+        // the caster cools out of the white: its body full of light, an outline crackling round it, both fading
+        const k = 1 - (t - ARRIVE) / 0.42, f = Math.floor(t * 30);
+        if (k > 0.86) squeezed(p, A, sh, 1, WHITE, C[6]);
+        for (let y = 0; y < A.h; y++)
+          for (let x = 0; x < A.w; x++)
+            if (inside(x, y)) p.light(A.x + x, A.y + y, C[6], k * k * (sh[y * A.w + x] === 1 ? 0.3 : 0.8));
+            else if ((inside(x - 1, y) || inside(x + 1, y) || inside(x, y - 1) || inside(x, y + 1)) && rand(x, y, f) < 0.85 * k) p.px(A.x + x, A.y + y, k > 0.5 && rand(x, y, 7) < 0.5 ? WHITE : C[6]);
+        p.glow(mx, my, 34, C[5], 0.6 * k);
+      }
+      if (t >= ARRIVE && t < ARRIVE + 0.2) {
+        const q = (t - ARRIVE) / 0.2;
+        flare(p, mx, my - 4, 18 * Math.pow(1 - q, 1.5) + 2, 1 - q, C);
+      }
+      const k = (t - ARRIVE + 0.03) / 0.5;
+      if (k >= 0 && k < 1) band(p, 0, 0, 4 + 30 * ease.outCubic(k), 0.2, Math.max(1, 3 * (1 - k)), 1.15 - k, [C[3], C[5], C[6], WHITE], (g) => Math.sin(g) >= 0, k < 0.25);
+      ps.draw(p);
+      lights.draw(p);
+    },
+  };
 }

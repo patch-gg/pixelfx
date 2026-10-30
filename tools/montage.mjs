@@ -42,9 +42,10 @@ const W = cols * CW + (cols + 1) * gap, H = rows * CH + (rows + 1) * gap;
 const cells = [];
 for (const [i, id] of ids.entries()) {
   const fx = await loadEffect(id), m = fx.meta, frame = createFrame(CW, CH);
-  const fit = Math.min(1, CW / m.size[0], CH / m.size[1]);
-  if (fit < 1) console.error(`${id} is ${m.size.join("x")}, bigger than a ${CW}x${CH} cell: it will be cropped`);
-  const x = Math.floor((CW - m.size[0]) / 2) + m.origin[0], y = Math.floor((CH - m.size[1]) / 2) + m.origin[1];
+  // a canvas that fits is centred; a bigger one is cropped round its anchor, keeping a strip of floor in view
+  const [w, h] = m.size, [ox, oy] = m.origin;
+  const x = w <= CW ? Math.floor((CW - w) / 2) + ox : Math.round(CW / 2 + ox - w / 2);
+  const y = h <= CH ? Math.floor((CH - h) / 2) + oy : CH - Math.min(h - oy, Math.round(CH * 0.16));
   const bg = backdrop(flags.bg ?? m.bg, CW, CH, y);
   cells.push({ id, fx, m, frame, x, y, bg, cx: gap + (i % cols) * (CW + gap), cy: gap + Math.floor(i / cols) * (CH + gap), delay: m.loop ? 0 : rand(i, 7) * stagger, inst: null, born: 0 });
 }

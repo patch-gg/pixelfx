@@ -1,50 +1,79 @@
-import { ramp, burst, rng, fly, seg, ease, clamp, WHITE } from "../../core/index.js";
-import { swing } from "./_lib.js";
+// The crescent, trace, glint and spark recipe is adapted from Sprite Fusion's open-source slash
+// (https://www.spritefusion.com/pixel-art-vfx/slash), MIT License, Copyright (c) 2026 Hugo Duprez.
+import { Particles, Lights, P, Rng, fit, sparkle, clamp, ease, WHITE } from "../../core/index.js";
+import { swing, slash, slashEnd, shavings, sliver } from "./_lib.js";
 
 export const meta = {
   name: "Dagger flurry",
-  desc: "A flurry of quick knife cuts: small sharp crescents flick in and out at all angles in front of the fighter, the last one biggest.",
-  tags: ["melee", "slash", "dagger", "flurry", "combo", "rogue", "combat", "directional", "one-shot"],
-  size: [60, 48],
-  origin: [14, 40],
-  duration: 0.6,
+  desc: "A flurry of small quick crescents at every angle in front of the fighter, each with a flick of sparks, finished by one big cut that glints and bursts.",
+  tags: ["melee", "slash", "dagger", "combo", "flurry", "fast", "combat", "directional", "one-shot"],
+  size: [148, 104],
+  origin: [36, 86],
+  duration: 0.95,
   loop: false,
   fps: 30,
   bg: "ground",
-  actor: true,
-  options: { palette: ["#140a26", "#2b1252", "#4a2390", "#7440cc", "#a070f0", "#cfa8ff", "#f0e0ff", "#ffffff"], count: 10, seed: 8 },
+  actor: 2,
+  options: {
+    palette: ["#1b1630", "#3a2f63", "#6150a3", "#9480d8", "#c7b8f5", "#efe9ff", "#ffffff"],
+    sparks: ["#ffffff", "#efe9ff", "#c7b8f5", "#9480d8"],
+    seed: 12,
+  },
 };
 
-export function draw(p, t, o) {
-  const C = ramp(o.palette), S = o.seed, n = clamp(Math.round(o.count), 2, 14), top = C.length - 1;
-  for (let i = 0; i < n; i++) {
-    const r = rng(S, i), last = i === n - 1;
-    const born = (i / n) * 0.32 + r.range(0, 0.02) - 0.035, q = t - born;
-    if (q < -0.001 || q > 0.2) continue;
-    // where it lands: in front of the fighter, the outer edge mostly facing out (right)
-    const mx = r.range(15, 31) + (last ? 2 : 0), my = r.range(-23, -6), th = r.range(-1.3, 1.3);
-    const R = last ? 13 : r.range(8.5, 11), span = r.range(2, 2.5) * (last ? 1.1 : 1), cw = r.next() < 0.5;
-    const cx = mx - Math.cos(th) * R, cy = my - Math.sin(th) * R;
-    const a0 = th + (cw ? -span / 2 : span / 2), a1 = th + (cw ? span / 2 : -span / 2);
-    const lead = ease.outQuart(seg(q, 0, 0.045)), tail = ease.inCubic(seg(q, 0.01, 0.1));
-    swing(p, { cx, cy, r: R, w: last ? 6 : 4, from: a0, to: a1, lead, tail, C, rimAt: 0.66 });
-    // a pin of light where the blade leaves the cut
-    const ex = cx + Math.cos(a1) * R, ey = cy + Math.sin(a1) * R, k = seg(q, 0.03, 0.05) * (1 - seg(q, 0.05, 0.12));
-    if (k > 0) {
-      p.px(ex, ey, WHITE);
-      if (k > 0.5) p.px(ex - 1, ey, C[top - 1]), p.px(ex + 1, ey, C[top - 1]), p.px(ex, ey - 1, C[top - 1]), p.px(ex, ey + 1, C[top - 1]);
-    }
-    p.glow(mx, my, last ? 14 : 9, C[top - 3], 0.35 * (1 - seg(q, 0.02, 0.12)) * seg(q, -0.01, 0.01));
-    // the last cut lands with a flash
-    if (last && q > 0.03 && q < 0.07) p.circle(mx, my, 2.5, WHITE), p.glow(mx, my, 18, C[top - 2], 0.5);
-  }
-  // nicks of light thrown off the cuts
-  burst(n, S + 1, (r, j) => {
-    const born = (j / n) * 0.32 + 0.02 + r.range(0, 0.03), age = t - born, life = r.range(0.08, 0.14);
-    if (age < 0 || age > life) return;
-    const g = rng(S, j), mx = g.range(14, 30), my = g.range(-22, -6), a = r.range(-2.2, 1.2), sp = r.range(40, 80);
-    const [x, y] = fly(mx, my, Math.cos(a) * sp, Math.sin(a) * sp, age, 120, 5), k = age / life;
-    p.px(x, y, k < 0.4 ? WHITE : C[top - 2]);
-    p.light(x, y, C[top - 3], 0.4 * (1 - k));
-  });
+const EVERY = 0.055;
+// small cuts: where, how they're turned, which way they go
+const CUTS = [
+  [21, -27, -0.5, 1], [33, -16, 0.9, -1], [26, -38, 2.4, 1], [37, -30, -1.8, -1], [19, -17, 0.2, 1], [30, -24, 1.4, -1],
+];
+
+export function create(o) {
+  const C = fit(o.palette, 7), Rg = new Rng(o.seed), ps = new Particles({ rng: Rg, ground: () => 0, sparks: o.sparks }), lights = new Lights();
+  const small = CUTS.map(([x, y, rot, dir], i) => swing({ cx: x, cy: y, R: Rg.range(12, 15), sy: Rg.range(0.55, 0.75), rot, a0: Rg.range(-2.8, -2.2), dir, span: Rg.range(2.3, 2.8), W: Rg.range(5.2, 6.4), t0: i * EVERY, sweep: 0.035, hold: 0.03, trail: 0.13, ramp: C }));
+  // the finisher: one wide flat cut right across the front, left to right
+  const big = swing({ cx: 24, cy: -26, R: 30, sy: 0.36, k: 0.24, rot: 0.12, a0: 3.0, dir: -1, span: 2.85, W: 11, t0: small.length * EVERY + 0.04, sweep: 0.055, hold: 0.06, trail: 0.24, ramp: C });
+  const all = [...small, big], ends = all.map(slashEnd), done = all.map(() => false);
+  const slivers = [-2.6, -1.5, -0.4, 0.7].map((a) => ({ a: a + Rg.range(-0.2, 0.2), r: Rg.range(4, 7), v: Rg.range(70, 110), arc: Rg.range(0.4, 0.7) }));
+  let t = 0;
+  return {
+    update(dt) {
+      t += dt;
+      all.forEach((s, i) => {
+        if (done[i] || t < s.t0 + s.sweep) return;
+        done[i] = true;
+        const e = ends[i], last = s === big;
+        lights.add(e.x, e.y, last ? 56 : 26, C[3], last ? 0.6 : 0.4, last ? 0.4 : 0.14);
+        if (last) lights.add(e.x, e.y, 16, WHITE, 0.7, 0.08);
+        for (let k = 0; k < (last ? 12 : 3); k++) {
+          const a = Math.atan2(e.dy, e.dx) + Rg.range(-0.5, 0.5), sp = Rg.range(100, last ? 340 : 220);
+          ps.spawn(P.SPARK, e.x, e.y, Math.cos(a) * sp, Math.sin(a) * sp, Rg.range(0.1, last ? 0.35 : 0.22));
+        }
+        shavings(ps, Rg, s, last ? 14 : 4, [C[4], C[5]]);
+        if (last) for (let k = 0; k < 5; k++) ps.spawn(P.STAR, s.cx + Rg.range(-22, 22), s.cy + Rg.range(-14, 14), 0, -4, Rg.range(0.2, 0.45), Rg.chance(0.5) ? C[5] : WHITE, Rg.range(1, 2.2), Rg.range(0.05, 0.25));
+      });
+      ps.update(dt);
+      lights.update(dt);
+    },
+    draw(p) {
+      for (const s of all) slash(p, s, t);
+      all.forEach((s, i) => {
+        const e = ends[i], g = t - s.t0 - s.sweep * 0.6, last = s === big, life = last ? 0.24 : 0.12;
+        if (g > 0 && g < life) sparkle(p, e.x, e.y, (last ? 10 : 4) * ease.outBack(Math.min(1, g / 0.04)) * (1 - g / life), C[5], C[3], last ? 0.6 : 0.35);
+        // light rides each edge while it's moving
+        const u = t - s.t0;
+        if (u > 0 && u < s.sweep + 0.1) {
+          const h = slashEnd({ ...s, span: s.span * ease.outExpo(clamp(u / s.sweep)) });
+          p.glow(h.x, h.y, last ? 40 : 22, C[3], (last ? 0.5 : 0.35) * (1 - u / (s.sweep + 0.1)));
+        }
+      });
+      // the finisher throws slivers off its end
+      const q = t - big.t0 - big.sweep;
+      if (q > 0.02 && q < 0.14) {
+        const k = (q - 0.02) / 0.12, e = ends[ends.length - 1];
+        for (const s of slivers) sliver(p, e.x, e.y, s.a + Math.atan2(e.dy, e.dx), s.r + s.v * (q - 0.02), s.arc * (1 - 0.4 * k), k < 0.4 ? C[6] : k < 0.7 ? C[5] : C[4], 1 - k);
+      }
+      ps.draw(p);
+      lights.draw(p);
+    },
+  };
 }

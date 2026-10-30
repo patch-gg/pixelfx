@@ -1,52 +1,76 @@
-import { ramp, rng, clamp, TAU } from "../../core/index.js";
+import { Rng, fit, clamp, ease, TAU } from "../../core/index.js";
 
 export const meta = {
   name: "Impact frame",
-  desc: "An anime impact frame: two frames of white with black burst lines rushing at the hit, two frames inverted, then the lines snap back out and vanish.",
+  desc: "An anime impact: two frames of white with black burst lines rushing at the hit, two frames inverted, then the lines pull out past the edges and vanish.",
   tags: ["impact", "hit", "anime", "manga", "flash", "speed-lines", "screen", "one-shot"],
-  size: [96, 64],
-  origin: [48, 32],
-  duration: 0.2,
+  size: [320, 180],
+  origin: [160, 90],
+  duration: 0.3,
   loop: false,
   fps: 30,
   bg: "black",
-  options: { palette: ["#000000", "#ffffff"], lines: 26, seed: 19 },
+  options: { palette: ["#000000", "#ffffff"], lines: 64, seed: 19 },
 };
 
-// the burst lines: wedges pointing at the origin from past the canvas edge, each with its own reach
-function wedges(n, r) {
-  const out = [];
-  for (let i = 0; i < n; i++)
-    out.push({ a: ((i + r.range(0.1, 0.9)) / n) * TAU, inner: r.range(10, 26), w: r.range(0.9, 3) });
-  return out; // wedge i sits in the i-th slice of the circle, so a pixel only has to test its slice and the two beside it
+const FRAME = 1 / 30; // the beats are whole frames: 2 white, 2 inverted, 4 pulling out
+
+// burst lines: wedges aimed at the hit from past the edges, each its own width and reach, in angle order
+function burst(R, n) {
+  return Array.from({ length: n }, (_, i) => {
+    const thick = R.chance(0.18);
+    return { a: ((i + R.range(0.1, 0.9)) / n) * TAU, inner: thick ? R.range(30, 48) : R.range(18, 70), w: thick ? R.range(5, 8) : R.range(1.2, 3.6) };
+  });
 }
 
-export function draw(p, t, o) {
-  const C = ramp(o.palette), S = o.seed, DARK = C[0], LIGHT = C[C.length - 1];
-  const [W, H] = meta.size, [OX, OY] = meta.origin, x0 = -OX, y0 = -OY, x1 = W - OX - 1, y1 = H - OY - 1;
-  const f = Math.floor(t * meta.fps + 1e-6);
-  if (f >= 6) return;
-  const inverted = f >= 2, field = f <= 3, set = wedges(o.lines, rng(S, f % 2 && field ? 2 : 1));
-  const back = field ? 0 : f === 4 ? 0.3 : 0.65; // after the field drops, the lines pull back out for two frames
-  const ink = inverted ? LIGHT : DARK, paper = inverted ? DARK : LIGHT;
-  // the jagged hit at the middle, in the line color, only while the field is up
-  const spikes = (ang) => 7 + 4 * Math.abs(Math.sin(ang * 6 + S)) + 2 * Math.sin(ang * 13 + S * 3);
-  p.shade(x0, y0, x1, y1, (x, y, out) => {
-    const ex = x, ey = y * 1.45, rho = Math.hypot(ex, ey), ang = Math.atan2(ey, ex);
-    let line = false;
-    const n = set.length, slot = Math.floor(((ang + TAU) % TAU) / (TAU / n));
-    for (let j = -1; j <= 1; j++) {
-      const w = set[(slot + j + n) % n];
-      let d = (((ang - w.a) % TAU) + TAU) % TAU;
-      if (d > Math.PI) d = TAU - d;
-      const inner = w.inner + back * 40, hw = Math.max(0.8, w.w * clamp((rho - inner) / 30) * (1 - back * 0.5));
-      if (rho > inner && d * rho < hw) {
-        line = true;
-        break;
+// the jagged burst at the middle: a spiky star whose points shift every frame
+const spikes = (a, ph) => 10 + 6 * Math.abs(Math.sin(a * 5 + ph)) + 4 * Math.abs(Math.sin(a * 11 + ph * 2.7)) + 2 * Math.sin(a * 23 + ph);
+
+export function create(o) {
+  const C = fit(o.palette, 3), R = new Rng(o.seed), INK = C[0], PAPER = C[2];
+  const [W, H] = meta.size, [OX, OY] = meta.origin, x0 = -OX, y0 = -OY;
+  const sets = [burst(R, o.lines), burst(R, o.lines)], jit = [[Math.round(R.range(-2, 2)), Math.round(R.range(-1, 1))], [Math.round(R.range(-2, 2)), Math.round(R.range(-1, 1))]];
+  const ph = [R.range(0, TAU), R.range(0, TAU), R.range(0, TAU), R.range(0, TAU)];
+  // every frame is fixed, so work each one out once: which pixels are ink (1) or paper (2), 0 for nothing
+  const masks = [];
+  for (let f = 0; f < 8; f++) {
+    const m = new Uint8Array(W * H), set = sets[f % 2], n = set.length, [jx, jy] = f < 4 ? jit[f % 2] : [0, 0];
+    const reach = f < 4 ? 0 : Math.pow((f - 3) / 4.5, 1.5), thin = f < 4 ? 1 : 1 - (f - 3) / 5.5;
+    for (let j = 0; j < H; j++)
+      for (let i = 0; i < W; i++) {
+        const X = x0 + i + 0.5 - jx, Y = y0 + j + 0.5 - jy, rho = Math.hypot(X, Y * 1.35), ang = Math.atan2(Y * 1.35, X);
+        const slot = Math.floor((((ang % TAU) + TAU) % TAU) / (TAU / n));
+        let line = false;
+        for (let k = -1; k <= 1 && !line; k++) {
+          const l = set[(slot + k + n) % n];
+          let d = (((ang - l.a) % TAU) + TAU) % TAU;
+          if (d > Math.PI) d = TAU - d;
+          const inner = l.inner + reach * 150, hw = l.w * clamp((rho - inner) / 40) * thin;
+          line = rho > inner && d * rho < Math.max(0.5, hw);
+        }
+        if (f < 4) {
+          const r2 = Math.hypot(X, Y * 1.1), core = spikes(Math.atan2(Y * 1.1, X), ph[f]) * (f === 0 ? 0.85 : 1 + f * 0.08);
+          m[j * W + i] = r2 < core ? (r2 < 4 + f ? 2 : 1) : line ? 1 : 2;
+        } else m[j * W + i] = line ? 2 : 0;
       }
-    }
-    if (line) return ink;
-    if (field && rho < spikes(ang + f * 0.4)) return ink;
-    if (field) return paper;
-  });
+    masks.push(m);
+  }
+  let t = 0;
+  return {
+    update(dt) {
+      t += dt;
+    },
+    draw(p) {
+      const f = Math.floor(t / FRAME + 1e-6);
+      if (f >= 8) return;
+      // two frames of ink on paper, two inverted, then paper lines pulling out over the scene
+      const m = masks[f], inv = f === 2 || f === 3, ink = inv ? PAPER : INK, paper = inv ? INK : PAPER;
+      p.shade(x0, y0, x0 + W, y0 + H, (x, y) => {
+        const i = Math.floor(x - x0), j = Math.floor(y - y0);
+        if (i < 0 || j < 0 || i >= W || j >= H) return;
+        const v = m[j * W + i];
+        return v === 1 ? ink : v === 2 ? (f < 4 ? paper : PAPER) : 0;
+      });
+    },
+  };
 }

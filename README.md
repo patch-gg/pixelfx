@@ -4,7 +4,7 @@
 
 # pixelfx.
 
-**<!-- count -->299<!-- /count --> pixel art effects and animations, every one a small piece of code.** Fire,
+**<!-- count -->232<!-- /count --> pixel art effects and animations, every one a small piece of code.** Fire,
 explosions, magic, weather, UI, pickups, critters and more. Play them live, recolor and mirror them, drop them into
 a browser game, or export sprite sheets for any engine. Plus a Claude Code skill that makes new ones the way a
 picky pixel artist would: draft, render, look, refine.
@@ -22,26 +22,26 @@ set the bar. This repo is our take on the idea at library scale, with a skill to
 <!-- catalog -->
 | category | effects | some of them |
 |---|---|---|
-| **fire** | 17 | brazier, campfire, candle, ember burst, fire breath, fire ring… |
-| **explosions** | 16 | barrel explosion, big explosion, cartoon pow, chain explosions, dirt explosion, dust cloud… |
-| **water** | 15 | bubbles, drip, fountain, geyser, puddle step, rain splash… |
-| **ice** | 13 | blizzard vortex, cold mist, freeze, frost breath, frost nova, frozen ground… |
-| **lightning** | 14 | ball lightning, chain lightning, charge up, electric field, electrified, lightning dash… |
-| **sci-fi** | 15 | cloak, data stream, emp blast, energy core, force field, glitch… |
-| **melee** | 16 | axe chop, claw swipe, counter flash, dagger flurry, double slash, hammer smash… |
-| **impacts** | 14 | blunt hit, bullet impact, combo hit, critical hit, ground slam, heavy landing… |
-| **projectiles** | 17 | arrow, arrow hit, boomerang, bullet tracer, cannonball, energy disc… |
-| **spawn & death** | 13 | coin drop, disintegrate, dissolve burn, egg hatch, ghost out, poof… |
-| **arcane** | 16 | arcane beam, arcane missiles, arcane orb, blink in, blink out, enchant… |
-| **holy** | 12 | blessing, divine shield, feather burst, halo, heal, healing ring… |
-| **shadow** | 14 | black hole, curse, dark explosion, doom mark, eclipse, grasping hands… |
-| **status** | 16 | bleeding, burning, charmed, confused, cursed, fortified… |
-| **nature** | 15 | acid splash, boulder, earth spike, healing bloom, leaf storm, poison cloud… |
-| **weather** | 16 | aurora, blizzard, cherry blossoms, clouds, falling leaves, fireflies… |
-| **ui** | 19 | achievement, button press, checkmark, coin collect, combo counter, confetti… |
-| **pickups** | 15 | ammo crate, chest open, coin spin, collect burst, crystal shard, gem spin… |
-| **transitions** | 12 | blinds, burn away, crt off, diamond wipe, dither fade, glitch wipe… |
-| **critters** | 14 | bat, bird, butterfly, crab, eyeball, fish school… |
+| **fire** | 12 | brazier, campfire, candle, fire breath, fire ring, fire tornado… |
+| **explosions** | 12 | barrel explosion, big explosion, cartoon pow, dirt explosion, firework burst, firework rocket… |
+| **water** | 12 | bubbles, drip, fountain, geyser, rain splash, ripples… |
+| **ice** | 10 | blizzard vortex, freeze, frost breath, frost nova, ice crystal, ice lance… |
+| **lightning** | 11 | ball lightning, chain lightning, charge up, electrified, lightning strike, plasma ball… |
+| **sci-fi** | 12 | emp blast, energy core, force field, glitch, hologram, jetpack… |
+| **melee** | 12 | claw swipe, dagger flurry, double slash, hammer smash, heavy cleave, scythe reap… |
+| **impacts** | 11 | blunt hit, bullet impact, critical hit, ground slam, heavy landing, hit flash… |
+| **projectiles** | 13 | arrow, bullet tracer, cannon shot, energy disc, signal flare, homing missile… |
+| **spawn & death** | 10 | coin drop, disintegrate, dissolve burn, egg hatch, poof, respawn beam… |
+| **arcane** | 12 | arcane beam, arcane missiles, arcane orb, blink in, blink out, magic circle cast… |
+| **holy** | 10 | blessing, divine shield, feather burst, halo, heal, healing ring… |
+| **shadow** | 12 | black hole, curse, dark explosion, eclipse, grasping hands, hex sigil… |
+| **status** | 13 | bleeding, burning, charmed, confused, cursed, frozen… |
+| **nature** | 13 | acid splash, boulder, earth spike, healing bloom, leaf storm, poison cloud… |
+| **weather** | 12 | aurora, blizzard, cherry blossoms, clouds, falling leaves, fireflies… |
+| **ui** | 12 | achievement, coin collect, combo counter, confetti, countdown, crit number… |
+| **pickups** | 11 | chest open, coin spin, collect burst, crystal shard, gem spin, heart pickup… |
+| **transitions** | 10 | blinds, burn away, crt off, diamond wipe, glitch wipe, iris… |
+| **critters** | 12 | bat, bird, butterfly, eyeball, fish school, flying skull… |
 <!-- /catalog -->
 
 Every effect is a file in `src/fx/<category>/<name>.js`. The [catalog](docs/CATALOG.md) lists them all.

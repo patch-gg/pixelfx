@@ -102,8 +102,11 @@ main { max-width: 1240px; margin: 0 auto; }
 .section-head { display: flex; align-items: baseline; gap: 12px; padding-block: 28px 12px; flex-wrap: wrap; }
 .section-head h2 { margin: 0; font: 400 27px/33px var(--display); }
 .section-head p { margin: 0; color: var(--quiet); font: 400 14px/1.4 var(--text); }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 12px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); grid-auto-flow: dense; gap: 12px; }
 .tile { margin: 0; cursor: pointer; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* big effects (explosions, weather, full-screen transitions) get four cells, so their 1 px lines survive */
+.tile.big { grid-column: span 2; grid-row: span 2; }
+.tile.screen .stage, .sheet .big.screen { aspect-ratio: 16 / 9; }
 .tile .stage { background: var(--stage); aspect-ratio: 6 / 5; overflow: hidden; border: 1px solid transparent; }
 .tile:hover .stage, .tile:focus-visible .stage { border-color: var(--quiet); }
 .tile canvas, .detail canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
@@ -188,4 +191,7 @@ pre {
 @media (max-width: 520px) {
   .bar-in { flex-wrap: wrap; }
   #q { width: 100%; max-width: none; }
+}
+@media (max-width: 330px) {
+  .tile.big { grid-column: auto; grid-row: auto; }
 }

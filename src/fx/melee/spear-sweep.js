@@ -1,99 +1,73 @@
-import { PAL, ramp, at, burst, fly, seg, ease, clamp, smooth, wrap, TAU, WHITE } from "../../core/index.js";
-import { dustCloud } from "./_lib.js";
+// The crescent, trace and glint recipe is adapted from Sprite Fusion's open-source slash, and the rolling dust and
+// grit from his explosion (https://www.spritefusion.com/pixel-art-vfx), MIT License, Copyright (c) 2026 Hugo Duprez.
+import { Particles, Lights, P, PF, Rng, fit, sparkle, clamp, ease } from "../../core/index.js";
+import { swing, onSwing, travel, slash, slashEnd, stone } from "./_lib.js";
 
 export const meta = {
   name: "Spear sweep",
-  desc: "A long polearm swept low around the front: a wide flat arc skims the floor from behind to the far side, kicking up a wake of dust.",
-  tags: ["melee", "sweep", "spear", "polearm", "low", "ground", "combat", "directional", "one-shot"],
-  size: [92, 40],
-  origin: [44, 32],
-  duration: 0.7,
+  desc: "A wide low sweep at shin height: a long flat crescent swings from behind the legs round the front, and the wind of it kicks a wake of dust and grit along the floor.",
+  tags: ["melee", "sweep", "spear", "polearm", "low", "aoe", "ground", "dust", "combat", "one-shot"],
+  size: [216, 84],
+  origin: [104, 70],
+  duration: 1.5,
   loop: false,
   fps: 30,
   bg: "ground",
-  actor: true,
-  options: { palette: PAL.cyber, radius: 34, seed: 10 },
+  actor: 2,
+  options: {
+    palette: ["#0f2a2a", "#18504a", "#22806e", "#3fb894", "#8fe6c0", "#dcfff0", "#ffffff"],
+    sparks: ["#fff3a6", "#ffe26b", "#ff8a2a", "#f2561d"],
+    stone: "#4a3f69",
+    seed: 10,
+  },
 };
 
-const DUST = ramp(["#2e2830", "#463e48", "#655b63", "#8a7f84", "#b0a5a6", "#d6cdc8"]);
-const P0 = Math.PI + 0.45, P1 = -0.4; // from behind on the left, round the front, to behind on the right
-const CY = -7;
-
-const leadAt = (t) => P0 + (P1 - P0) * ease.outCubic(seg(t + 0.02, 0, 0.22));
-const tailAt = (t) => P0 + (P1 - P0) * ease.inQuad(seg(t, 0.05, 0.34));
-
-function band(p, t, o, front) {
-  const C = ramp(o.palette), R = o.radius, ry = R * 0.24, top = C.length - 1;
-  const lead = leadAt(t), tail = tailAt(t), span = tail - lead, fade = seg(t, 0.2, 0.34);
-  if (span <= 0.03 || fade >= 1) return;
-  p.shade(-R - 1, CY - ry - 1, R + 1, CY + ry + 1, (x, y, out) => {
-    const nx = x / R, ny = (y - CY) / ry, d = Math.sqrt(nx * nx + ny * ny);
-    if (d > 1) return;
-    const ang = Math.atan2(ny, nx);
-    if (Math.sin(ang) >= 0 !== front) return;
-    const s = 1 - wrap(tail - ang, TAU) / span; // 0 at the tail .. 1 at the spear
-    if (s < 0) return;
-    const wdt = 0.55 * Math.pow(s, 0.7) * (s > 0.97 ? (1 - s) / 0.03 : 1) + 0.08;
-    if (d < 1 - wdt) return;
-    const v = (d - (1 - wdt)) / wdt;
-    out.c = v > 0.74 ? (front ? WHITE : C[top - 1]) : at(C.slice(1, top), v * 0.7 + s * 0.3 + (front ? 0.1 : -0.15));
-    out.a = clamp(smooth(0, 0.5, s) * (v > 0.74 ? 1.4 : 0.5 + v)) * (1 - fade * (1 - v * 0.5));
-  });
-  // the shaft itself at the edge: a bright line from the hands out to the tip
-  if (t < 0.24 && Math.sin(lead) >= 0 === front) {
-    const ex = Math.cos(lead), ey = Math.sin(lead);
-    p.line(ex * 9, CY + ey * ry * 0.3, ex * R, CY + ey * ry, (u) => (u > 0.8 ? WHITE : C[top - 1]));
-    p.glow(ex * (R - 3), CY + ey * (ry - 1), 12, C[top - 3], 0.4 * (1 - seg(t, 0.15, 0.24)));
-  }
-}
-
-export function drawBack(p, t, o) {
-  band(p, t, o, false);
-}
-
-export function draw(p, t, o) {
-  const C = ramp(o.palette), R = o.radius, ry = R * 0.24, S = o.seed, top = C.length - 1;
-  // a wake of dust where the tip skims the floor across the front: low, flat, overlapping puffs that roll on
-  const puffs = [];
-  burst(20, S, (r, i) => {
-    const ang = P0 + (P1 - P0) * (0.32 + 0.56 * (i + r.range(0, 1)) / 20); // along the front of the sweep
-    const born = bornAt(ang) + r.range(0, 0.02), age = t - born, life = r.range(0.3, 0.42);
-    if (age < 0 || age > life || Math.sin(ang) < 0.2) return;
-    const k = age / life, push = ease.outCubic(seg(age, 0, 0.35));
-    puffs.push({
-      x: Math.cos(ang) * R * r.range(0.82, 0.98) + push * r.range(3, 9), y: -1 - push * r.range(1, 3.5) - age * 4,
-      r: r.range(3, 4.6) * (0.45 + 0.7 * push) * (1 - 0.85 * ease.inQuad(seg(k, 0.4, 1))), a: 1 - seg(k, 0.85, 1), sy: 0.6,
-    });
-  });
-  dustCloud(p, puffs, DUST, S, 0.22, 0.4);
-  band(p, t, o, true); // the blade over its own dust
-  // grit flicked up ahead of the blade
-  burst(8, S + 1, (r) => {
-    const ang = P0 + (P1 - P0) * r.range(0.3, 0.85), born = bornAt(ang), age = t - born, life = r.range(0.25, 0.4);
-    if (age < 0 || age > life || Math.sin(ang) < 0.1) return;
-    const x0 = Math.cos(ang) * R * 0.95, y0 = CY + Math.sin(ang) * ry, vx = Math.sin(ang) * r.range(40, 80);
-    const [x, y] = fly(x0, Math.min(y0, -1), vx, -r.range(40, 80), age, 320, 1);
-    if (y > 0) return;
-    p.px(x, y, at(DUST, r.range(0.5, 1)));
-  });
-  // glints off the spearhead as it whips past the front
-  burst(5, S + 2, (r) => {
-    const ang = P0 + (P1 - P0) * r.range(0.35, 0.8), born = bornAt(ang), age = t - born, life = r.range(0.12, 0.2);
-    if (age < 0 || age > life) return;
-    const x0 = Math.cos(ang) * R, y0 = CY + Math.sin(ang) * ry;
-    const [x, y] = fly(x0, y0, Math.sin(ang) * r.range(50, 90), -r.range(10, 40), age, 100, 4), k = age / life;
-    p.px(x, y, k < 0.5 ? WHITE : C[top - 1]);
-    p.light(x, y, C[top - 3], 0.4 * (1 - k));
-  });
-}
-
-// when the spear's edge passes an angle on its way round
-function bornAt(ang) {
-  let lo = 0, hi = 0.22;
-  for (let i = 0; i < 12; i++) {
-    const mid = (lo + hi) / 2;
-    if (leadAt(mid) > ang) lo = mid;
-    else hi = mid;
-  }
-  return lo;
+export function create(o) {
+  const C = fit(o.palette, 7), Rg = new Rng(o.seed), st = stone(o.stone), ps = new Particles({ rng: Rg, ground: () => 0, sparks: o.sparks }), lights = new Lights();
+  // from behind the left leg, round the front, out to the right; the far part is behind the fighter
+  const A = swing({ cx: 2, cy: -12, R: 50, sy: 0.2, k: 0.19, rot: -0.04, a0: Math.PI + 0.55, dir: -1, span: Math.PI + 0.35, W: 19, t0: 0, sweep: 0.13, hold: 0.05, trail: 0.3, ramp: C });
+  const end = slashEnd(A);
+  let t = 0, lastU = 0, done = false;
+  return {
+    update(dt) {
+      t += dt;
+      // the wind under the blade kicks dust up off the floor as it passes, rolling on the way it goes
+      const U = A.span * ease.outExpo(clamp(t / A.sweep));
+      for (let u = lastU; u < U; u += 0.09) {
+        const tr = travel(A, u), near = Math.sin(tr.a) >= 0, fy = near ? -1 : -3, sp = Rg.range(30, 90);
+        ps.spawn(P.SMOKE, tr.x, fy - Rg.range(0, 2), tr.dx * sp, -Rg.range(4, 16), Rg.range(0.7, 1.15), st.dust, Rg.range(3, 5.5), Rg.range(0, 0.05));
+        if (Rg.chance(0.6)) ps.spawn(P.GRIT, tr.x, fy, tr.dx * Rg.range(40, 120) + Rg.range(-20, 20), -Rg.range(40, 130), Rg.range(0.6, 1.0), Rg.pick([st.light, st.body, st.shade]), Rg.chance(0.3) ? 2 : 1);
+        if (Rg.chance(0.35)) ps.spawn(P.MOTE, tr.x, tr.y, tr.dx * Rg.range(40, 100), tr.dy * 40 - Rg.range(5, 20), Rg.range(0.2, 0.4), Rg.chance(0.5) ? C[4] : C[5], 0.6, 0, near ? 0 : PF.BACK);
+      }
+      lastU = U;
+      if (!done && t >= A.sweep) {
+        done = true;
+        lights.add(end.x, end.y - 4, 50, C[3], 0.5, 0.35);
+        for (let i = 0; i < 8; i++) {
+          const a = Math.atan2(end.dy, end.dx) + Rg.range(-0.5, 0.3), sp = Rg.range(120, 260);
+          ps.spawn(P.SPARK, end.x, end.y, Math.cos(a) * sp, Math.sin(a) * sp - 40, Rg.range(0.12, 0.3));
+        }
+        // the wake piles up and rolls on past the tip
+        for (let i = 0; i < 6; i++) ps.spawn(P.SMOKE, end.x + Rg.range(-6, 4), -Rg.range(1, 4), Rg.range(30, 90), -Rg.range(4, 14), Rg.range(0.9, 1.25), st.dust, Rg.range(4.5, 7), Rg.range(0, 0.08), PF.BIG);
+      }
+      ps.update(dt);
+      lights.update(dt);
+    },
+    drawBack(p) {
+      slash(p, A, t, -1);
+      ps.draw(p, "back");
+    },
+    draw(p) {
+      slash(p, A, t, 1);
+      const g = t - A.sweep * 0.6;
+      if (g > 0 && g < 0.24) sparkle(p, end.x, end.y, 9 * ease.outBack(Math.min(1, g / 0.05)) * (1 - g / 0.24), C[5], C[3], 0.55);
+      // light rides the edge
+      if (t < A.sweep + 0.12) {
+        const [x, y] = onSwing(A, A.R - 5, A.span * ease.outExpo(clamp(t / A.sweep)));
+        p.glow(x, y, 36, C[3], 0.45 * (1 - t / (A.sweep + 0.12)));
+      }
+      ps.draw(p, "front");
+      lights.draw(p);
+    },
+  };
 }

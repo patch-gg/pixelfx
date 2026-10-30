@@ -1,84 +1,106 @@
-import { PAL, RAMP, ramp, at, rng, burst, fly, seg, ease, lerp, TAU, WHITE } from "../../core/index.js";
-import { smoke, onCanvas } from "./_lib.js";
+// The flash lobes, spark, smoke and casing recipes are adapted from Sprite Fusion's open-source
+// muzzle-flash (https://www.spritefusion.com/pixel-art-vfx/muzzle-flash), MIT License, Copyright (c) 2026 Hugo Duprez.
+import { Particles, P, Rng, fit, mix, clamp, WHITE } from "../../core/index.js";
+import { flash, cloud, Smoke, casing } from "./_lib.js";
 
 export const meta = {
   name: "Shotgun blast",
-  desc: "A wide cone of flame with a white throat, a spray of pellets streaking out, burning powder and a heavy cloud of smoke that rolls forward and rises.",
-  tags: ["projectile", "muzzle", "gun", "shotgun", "flash", "directional", "one-shot"],
-  size: [80, 46],
-  origin: [5, 25],
-  duration: 0.8,
+  desc: "A shotgun blast from a muzzle `height` px above the floor (the origin): a wide ragged fan of flame, pellet streaks, a heavy rolling smoke cloud, a red shell kicked out on the pump.",
+  tags: ["projectile", "muzzle", "gun", "shotgun", "flash", "smoke", "casing", "directional", "one-shot"],
+  size: [160, 88],
+  origin: [44, 82],
+  duration: 3.2,
   loop: false,
   fps: 30,
-  bg: "dark",
-  options: { palette: PAL.fire, spread: 0.36, pellets: 9, seed: 5 },
+  bg: "ground",
+  options: {
+    palette: ["#4a1712", "#8a1f17", "#c9281f", "#f2561d", "#ff8a2a", "#ffc23d", "#ffe26b", "#fff3a6", "#ffffff"],
+    smoke: ["#221e2a", "#36313f", "#4e4858", "#6a6474", "#888192", "#a8a1b1", "#c8c1cf"],
+    shell: ["#4a0f14", "#9a1e22", "#d8423a", "#8c5c1c", "#e9b54a"],
+    height: 26,
+    seed: 5,
+  },
 };
 
-const F = 1 / 30;
+const F1 = 1 / 30;
 
-/** The cone: a fan as wide as the spread, flat across its front, torn into tongues of flame. Returns points. */
-function conePts(T, spread, L, x0, y0, k, base = 2.6, n = 120) {
-  const pts = [], m = T.length - 1;
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * TAU - Math.PI, q = Math.abs(a) / spread;
-    let R = base;
-    if (q < 1) {
-      const f = (a / spread * 0.5 + 0.5) * m, j = Math.min(m - 1, Math.floor(f)), w = f - j;
-      const tongue = T[j] + (T[j + 1] - T[j]) * w, notch = 1 - 0.3 * Math.abs(Math.sin(f * Math.PI));
-      R += L * (1 - q ** 5) * tongue * notch;
-    }
-    pts.push([x0 + Math.cos(a) * R * k, y0 + Math.sin(a) * R * k]);
+// the fan: a fat fireball at the muzzle and a spray of ragged tongues across the cone, each its own length
+function fan(R, f) {
+  const k = f === 1 ? 1 : f === 2 ? 0.82 : 0.55, w = f === 1 ? 1 : 1.25;
+  const L = [{ off: 0.5, a: 0, len: 11 * k, wid: 3.6 * w, core: 0.5 }];
+  for (let i = 0; i < 9; i++) {
+    const u = i / 8 - 0.5, a = u * 1.15 + R[i * 3] * 0.12, len = (17 + 11 * (1 - Math.abs(u) * 1.4) + R[i * 3 + 1] * 7) * k;
+    L.push({ off: 2, a, len, wid: (1.7 + R[i * 3 + 2]) * w, core: f === 1 ? 0.32 : 0 });
   }
-  return pts;
+  if (f === 1) for (const s of [-1, 1]) L.push({ off: 1, a: s * (1.6 + R[27 + (s > 0)] * 0.4), len: 5 + R[29] * 3, wid: 1.2, core: 0 });
+  return L;
 }
 
-export function draw(p, t, o) {
-  const C = ramp(o.palette), S = o.seed, sp = o.spread, inside = onCanvas(meta), cy = 0.5;
-  // smoke: a thick cloud shoved out in front of the barrel, slowing, then rolling up and thinning out
-  const puffs = [];
-  burst(9, S + 4, (q, i) => {
-    const age = t - 0.03 - q.range(0, 0.05), life = q.range(0.6, 0.74);
-    if (age < 0 || age > life) return;
-    const u = age / life, e = ease.outQuart(seg(age, 0, 0.32)), reach = 5 + (i / 8) * 26 + q.range(-2, 2);
-    puffs.push({
-      x: 3 + reach * e + age * 5, y: cy + q.range(-0.5, 0.5) * reach * sp * e - u * u * q.range(10, 18),
-      r: (2.5 + reach * 0.12) * (0.55 + 0.45 * e) * (1 + 0.5 * u), v: 1 - u * u,
-    });
-  });
-  smoke(p, puffs, RAMP.smoke, { base: 0.58, seed: S, inside });
-  // pellets: streaks racing out of the cone, gone off the edge in a few frames
-  burst(o.pellets, S + 2, (q) => {
-    const a = q.range(-sp, sp) * 0.8, v = q.range(520, 700), d = 6 + v * (t + q.range(0, 0.012)), len = q.range(6, 10);
-    const x = Math.cos(a) * d, y = cy + Math.sin(a) * d, x1 = x - Math.cos(a) * len, y1 = y - Math.sin(a) * len;
-    if (!inside(x1, y1)) return;
-    p.line(x, y, x1, y1, (u) => (u < 0.2 ? WHITE : at(C, 0.8 - u * 0.35)), (u) => (inside(lerp(x, x1, u), lerp(y, y1, u)) ? 1 : 0));
-  });
-  // the flash: a fat cone for one frame, a cooler ragged one torn forward the next, then tongues that peel off
-  const r = rng(S, 1), T = Array.from({ length: 9 }, () => r.range(0.75, 1.05));
-  const fan = sp * 2.1;
-  if (t < F) {
-    p.poly(conePts(T, fan, 23, 0, cy, 1), at(C, 0.56));
-    p.poly(conePts(T, fan, 23, 1, cy, 0.66, 2), at(C, 0.8));
-    p.ellipse(3.5, cy, 4, 2.6, WHITE);
-  } else if (t < 2 * F) {
-    p.poly(conePts(T, fan, 23, 3, cy, 1.05), at(C, 0.44), (x) => (x < 10 ? 0 : 1));
-    p.poly(conePts(T, fan, 23, 4, cy, 0.8, 2), at(C, 0.64), (x) => (x < 11 ? 0 : 1));
-    p.circle(1.5, cy, 1.6, at(C, 0.84));
-  } else if (t < 3 * F) {
-    // the flame front carries on alone as a ragged arc, then it's gone
-    p.poly(conePts(T, fan, 24, 0, cy, 1.05), at(C, 0.42), (x, y) => (Math.hypot(x, y - cy) > 15 ? 1 : 0));
-    p.poly(conePts(T, fan, 24, 0, cy, 0.98), at(C, 0.56), (x, y) => (Math.hypot(x, y - cy) > 17.5 ? 1 : 0));
+export function create(o) {
+  const F = fit(o.palette, 9), SM = fit(o.smoke, 7), SH = fit(o.shell, 5), H = o.height, MY = -H, R = new Rng(o.seed);
+  const ps = new Particles({ rng: R, ground: () => 0, sparks: [F[7], F[6], F[4], F[3]] }), smoke = new Smoke(R);
+  const right = meta.size[0] - meta.origin[0] - 2, jit = Array.from({ length: 32 }, () => R.next());
+  // pellets: a tight spray, gone off the canvas in a few frames, each dragging a hot streak
+  const pellets = Array.from({ length: 10 }, () => ({ a: R.range(-0.13, 0.13), v: R.range(900, 1150), d0: R.range(0, 4) }));
+  // sparks and burning wad, flung wide
+  for (let i = 0; i < 16; i++) {
+    const a = R.range(-0.55, 0.55), sp = R.range(180, 460);
+    ps.spawn(P.SPARK, 4, MY, Math.cos(a) * sp, Math.sin(a) * sp - 20, R.range(0.08, 0.3));
   }
-  // burning powder: embers thrown forward that fall and wink out
-  burst(9, S + 3, (q) => {
-    const a = q.range(-sp, sp) * 1.2, v = q.range(80, 200), life = q.range(0.2, 0.45);
-    if (t > life) return;
-    const u = t / life, [x, y] = fly(4, cy, Math.cos(a) * v, Math.sin(a) * v, t, 140, 3.5);
-    if (u > 0.6 && (t * 30 + q.next() * 4) % 3 < 1) return;
-    p.px(x, y, u < 0.3 ? at(C, 0.9) : u < 0.65 ? at(C, 0.68) : at(C, 0.48));
-    p.light(x, y, at(C, 0.7), 0.35 * (1 - u));
-  });
-  const L = 1 - seg(t, 0, 0.16);
-  p.glow(10, cy, 28, at(C, 0.66), 0.6 * L * L);
-  if (t < F) p.glow(4, cy, 9, WHITE, 0.5);
+  for (let i = 0; i < 7; i++) {
+    const a = R.range(-0.5, 0.3), sp = R.range(70, 200);
+    ps.spawn(P.EMBER, 4, MY, Math.cos(a) * sp, Math.sin(a) * sp, R.range(0.4, 0.9), F[5]);
+  }
+  // the smoke: a heavy shove of gas forward that slows, rolls, swells and lifts; the first of it lit by the blast
+  for (let i = 0; i < 26; i++) {
+    const a = R.range(-0.45, 0.35), sp = R.range(60, 230) * (i < 8 ? 1.15 : 0.8);
+    smoke.add({ x: 4 + R.range(0, 4), y: MY + R.range(-1.5, 1.5), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r0: R.range(2.5, 3.5), r1: R.range(7, 12.5), life: R.range(2.1, 2.9), a: R.range(0.55, 0.72), b: R.range(0.9, 1), drag: R.range(2.6, 3.6), rise: R.range(9, 15), grow: R.range(1.8, 2.8), warm: 1, delay: R.range(0, 0.04) });
+  }
+  for (let i = 0; i < 6; i++) smoke.add({ x: 2, y: MY, vx: R.range(15, 50), vy: -R.range(10, 25), r0: 1.5, r1: R.range(4, 6), life: R.range(1.8, 2.4), a: 0.5, b: 1, drag: 2, rise: 10, curl: -R.range(1.5, 3), warm: 0.6, delay: 0.08 + i * 0.05 });
+  // the pump throws the spent shell a beat later
+  const shell = { t0: 0.42, vx: -R.range(30, 55), vy: -R.range(110, 150), va: R.sign() * R.range(16, 24), a0: R.range(0, 6.28) };
+  let t = 0;
+  return {
+    update(dt) {
+      t += dt;
+      ps.update(dt);
+      smoke.update(dt);
+    },
+    draw(p) {
+      const pop = Math.exp(-(t + 0.008) / 0.05), list = smoke.puffs();
+      for (const q of list) q.w *= 0.25 + pop * 1.2;
+      cloud(p, list, SM, [SM[0], mix(F[1], SM[1], 0.5), mix(F[2], SM[2], 0.4), F[3], F[4], F[5], F[7]], { dens: 1.4, max: 0.86, lit: 1.4 });
+
+      // the shell: red hull, brass head, tumbling up and back, bouncing, lying a moment
+      if (t > shell.t0 && t < meta.duration - 0.05) {
+        const k = casing(-9, MY, shell.vx, shell.vy, shell.va, t - shell.t0, 850, -1, 0.35, shell.a0), ca = Math.cos(k.a), sa = Math.sin(k.a), fade = clamp((meta.duration - 0.05 - t) / 0.3);
+        for (let d = -1.5; d <= 1.5; d += 0.5) p.dot(k.x + ca * d, k.y + sa * d - 0.5, d > 0.8 ? (d > 1.2 ? SH[4] : SH[3]) : d > -0.6 ? SH[2] : SH[1], fade);
+        for (let d = -1; d <= 1; d += 0.5) p.dot(k.x + ca * d - sa, k.y + sa * d + ca - 0.5, d > 0.6 ? SH[3] : SH[0], fade);
+        if (k.hit >= 0 && k.hit < 0.07) p.glow(k.x, k.y, 5, SH[4], 0.5 * (1 - k.hit / 0.07));
+      }
+
+      // the flash: a white-hot hero frame, then the fan cooling and spreading as the gas balloons
+      if (t < 3 * F1) {
+        const f = t < F1 ? 1 : t < 2 * F1 ? 2 : 3;
+        flash(p, 0, MY, 0, fan(jit, f), f === 1 ? [WHITE, F[7], F[6], F[3]] : f === 2 ? [F[7], F[6], F[4], F[2]] : [F[5], F[4], F[3], F[1]], f + 9);
+      }
+      // the pellets: hot heads with tails that cool to orange, clipped at the canvas edge
+      if (t < 0.2)
+        for (const q of pellets) {
+          const head = 6 + q.d0 + q.v * t, tail = Math.max(4, head - 26), ca = Math.cos(q.a), sa = Math.sin(q.a);
+          for (let d = tail; d <= head; d += 0.5) {
+            const x = ca * d;
+            if (x > right) break;
+            const u = (d - tail) / Math.max(1, head - tail);
+            p.dot(x, MY + sa * d, u > 0.85 ? WHITE : u > 0.5 ? F[6] : F[4], u > 0.3 ? 1 : u / 0.3);
+          }
+          if (ca * head < right) p.glow(ca * head, MY + sa * head, 4, F[6], 0.5);
+        }
+      ps.draw(p);
+      // light: a big pop that floods the floor, a white heart
+      p.glow(8, MY, 46, F[4], 0.95 * pop);
+      p.glow(4, MY, 12, WHITE, 0.6 * pop);
+      p.glow(10, 0, 30, F[4], 0.28 * pop);
+    },
+  };
 }

@@ -1,89 +1,187 @@
-import { burst, cycle, seg, ease, clamp, TAU } from "../../core/index.js";
-import { steps, UMBRA } from "./_lib.js";
+import { Particles, P, Rng, fit, clamp, smooth, ease, TAU, WHITE, mix } from "../../core/index.js";
+import { VOID, Puffs, PK, Drops, floorPool, ringFast } from "./_lib.js";
 
 export const meta = {
   name: "Grasping hands",
-  desc: "Shadow arms burst from a black pool, fingers splayed, then clench like claws toward the middle, tremble, and are dragged back under.",
-  tags: ["shadow", "hands", "grab", "root", "ground", "dark", "one-shot"],
-  size: [84, 54],
-  origin: [42, 48],
-  duration: 1.8,
+  desc: "Shadow arms burst up out of a dark pool with a splash, clench their hands into claws, strain, and are dragged back under, fingers clawing at the air.",
+  tags: ["shadow", "hands", "arms", "grab", "ground", "dark", "magic", "one-shot"],
+  size: [200, 116],
+  origin: [100, 100],
+  duration: 3.1,
   loop: false,
   fps: 30,
   bg: "ground",
-  options: { palette: UMBRA, height: 22, seed: 12 },
+  options: { palette: VOID, seed: 5 },
 };
 
-// one hand as segments [x0, y0, x1, y1, width] plus a palm, for an arm of length A leaning by `lean`,
-// with grip g (0 open fan .. 1 curled claw) and facing f (+1: fingers curl to the right)
-function hand(bx, by, A, lean, g, f) {
-  const segs = [], ca = Math.cos(lean - Math.PI / 2), sa = Math.sin(lean - Math.PI / 2);
-  const wx = bx + ca * A, wy = by + sa * A; // wrist
-  segs.push([bx, by + 2, (bx + wx) / 2, (by + 2 + wy) / 2, 6], [(bx + wx) / 2, (by + 2 + wy) / 2, wx, wy, 5]);
-  const px = wx + ca * 3, py = wy + sa * 3; // palm
-  const fingers = [[-0.5, 3.4, 2.8], [-0.17, 4.2, 3.2], [0.17, 4, 3], [0.5, 3.2, 2.6]];
-  for (const [spread, l1, l2] of fingers) {
-    const a1 = lean - Math.PI / 2 + spread * (1.25 - g) + f * g * 0.9, a2 = a1 + f * (0.25 + g * 1.5);
-    const rx = px + Math.cos(lean - Math.PI / 2 + spread * 1.4) * 2.6, ry = py + Math.sin(lean - Math.PI / 2 + spread * 1.4) * 2.6;
-    const kx = rx + Math.cos(a1) * l1, ky = ry + Math.sin(a1) * l1;
-    segs.push([rx, ry, kx, ky, 2.1], [kx, ky, kx + Math.cos(a2) * l2, ky + Math.sin(a2) * l2, 1.5]);
+const RX = 42, OPEN = 0.32, SHUT = 2.35, LX = -0.6, LY = -0.8;
+
+// an arm at t: it rises out of the pool along its own shape, bent at the elbow, swaying; returns its spine
+function arm(A, t) {
+  const e = clamp((t - A.t0) / 0.22), d = clamp((t - A.td) / 0.34);
+  if (e <= 0 || d >= 1) return null;
+  const rise = ease.outBack(e, 1.6) * (1 - ease.inQuad(d)), hidden = (1 - rise) * A.L;
+  const grip = gripOf(A, t), strain = t > A.t0 + 0.5 && t < A.td ? Math.sin(t * 47 + A.ph) * 0.03 : 0;
+  const elbow = A.bend * (0.3 + 0.7 * grip) * (1 - d) + strain, lean = A.lean + 0.06 * Math.sin(t * 2.2 + A.ph) + d * A.lean * 0.6;
+  let th = -Math.PI / 2 + lean, x = A.x - Math.cos(th) * hidden, y = A.y - Math.sin(th) * hidden;
+  const pts = [], n = Math.ceil(A.L / 0.5);
+  for (let i = 0; i <= n; i++) {
+    const s = i * 0.5, u = s / A.L;
+    pts.push({ x, y, th, w: A.W * (1 - 0.5 * u) + 0.4, u });
+    th += 0.5 * (elbow * Math.exp(-(((u - 0.52) / 0.07) ** 2)) / (0.07 * Math.sqrt(Math.PI) * A.L) + A.curve / A.L);
+    x += Math.cos(th) * 0.5;
+    y += Math.sin(th) * 0.5;
   }
-  // thumb, curling the other way
-  const ta = lean - Math.PI / 2 - f * (1.1 - g * 0.9), tx = px - f * 2.2 * Math.cos(lean), ty = py + 1;
-  const kx = tx + Math.cos(ta) * 3, ky = ty + Math.sin(ta) * 3, ta2 = ta + f * g * 1.4;
-  segs.push([tx, ty, kx, ky, 2], [kx, ky, kx + Math.cos(ta2) * 2.4, ky + Math.sin(ta2) * 2.4, 1.5]);
-  return { segs, palm: [px, py], tips: segs.filter((_, i) => i > 1 && i % 2 === 1).map((s) => [s[2], s[3]]) };
+  return pts;
+}
+// how closed the hand is: opens as it rises, snaps shut into a claw, splays as it's dragged down
+function gripOf(A, t) {
+  const shut = ease.outBack(clamp((t - A.t0 - 0.3) / 0.12), 2.2), splay = smooth(A.td, A.td + 0.12, t);
+  return shut * (1 - splay) - 0.35 * splay;
 }
 
-export function draw(p, t, o) {
-  const C = steps(o.palette), S = o.seed;
-  const open = ease.outCubic(seg(t, 0, 0.14)), close = ease.inQuad(seg(t, 1.45, 1.8));
-  const poolR = 27 * open * (1 - close);
-
-  if (poolR > 0.8) {
-    p.ellipse(0, 0.5, poolR, poolR * 0.18 + 0.8, (d, a) => (d > 0.8 ? (Math.sin(a) < 0 ? C[6] : C[4]) : d > 0.55 ? C[1] : C[0]));
-    p.glow(0, -2, 30 * (1 - close), C[5], 0.28 * open * (1 - close));
-  }
-
-  // three hands, the middle one tallest; each rises, splays, clenches toward the middle, trembles, sinks
-  const hands = [];
-  burst(3, S, (r, i) => {
-    const side = i - 1, born = [0.1, 0.04, 0.16][i] + r.range(0, 0.04), sink = 1.08 + r.range(0, 0.12);
-    const rise = ease.outBack(seg(t, born, born + 0.28), 1.8), down = ease.inQuad(seg(t, sink, sink + 0.36));
-    if (rise <= 1e-3 || down >= 1) return;
-    const A = o.height * (i === 1 ? 1 : r.range(0.68, 0.8)), lean = side * 0.38 + r.range(-0.08, 0.08);
-    const clench = ease.outBack(seg(t, born + 0.42, born + 0.6), 2.2) - 0.25 * seg(t, born + 0.15, born + 0.38) * (1 - seg(t, born + 0.42, born + 0.5));
-    const shake = t > born + 0.6 && t < sink ? Math.sin(t * 70 + i * 2) * 0.35 : 0;
-    const f = side === 0 ? (r.next() < 0.5 ? -1 : 1) : -side;
-    const sunk = (A + 14) * down;
-    hands.push(hand(side * 21 + r.range(-2, 2) + shake, sunk + (1 - rise) * (A + 16), A, lean, clamp(clench, -0.3, 1.15), f));
-  });
-  // stamp in passes so a hand reads as one shape: outline, lit upper left, black body; the floor clips them
-  const FLOOR = 1;
-  const capsule = (x0, y0, x1, y1, r, c) => {
-    const dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy || 1e-9;
-    p.shade(Math.min(x0, x1) - r, Math.min(y0, y1) - r, Math.max(x0, x1) + r, Math.min(FLOOR, Math.max(y0, y1) + r), (x, y) => {
-      if (y > FLOOR) return;
-      const u = clamp(((x - x0) * dx + (y - y0) * dy) / L2), ex = x0 + dx * u - x, ey = y0 + dy * u - y;
-      return ex * ex + ey * ey <= r * r ? c : undefined;
-    });
-  };
-  const pass = (dx, dy, grow, c) => {
-    for (const h of hands) {
-      capsule(h.palm[0] + dx, h.palm[1] + dy, h.palm[0] + dx, h.palm[1] + dy, 3.2 + grow, c);
-      for (const [x0, y0, x1, y1, w] of h.segs) capsule(x0 + dx, y0 + dy, x1 + dx, y1 + dy, w / 2 + grow, c);
+// the arm in cross-sections, lit like the tendrils: a near-black body, a bright edge toward the light
+function drawArm(p, A, pts, C) {
+  const surf = A.y;
+  for (const q of pts) {
+    if (q.y > surf) continue;
+    const nx = -Math.sin(q.th), ny = Math.cos(q.th), ks = nx * LX + ny * LY >= 0 ? 1 : -1;
+    for (let v = -q.w; v <= q.w; v += 0.5) {
+      const x = q.x + nx * v, y = q.y + ny * v, u = (v / q.w) * ks;
+      if (y <= surf) p.px(x, y, u > 0.55 ? C[2] : u > -0.45 ? C[1] : C[0]);
     }
-  };
-  pass(0, 0, 0.8, C[3]);
-  pass(-0.6, -0.5, 0, C[6]);
-  pass(0.45, 0.35, -0.05, C[1]);
-  for (const h of hands) for (const [x, y] of h.tips) if (y < FLOOR) p.px(x, y, C[7]);
-  for (const h of hands) if (h.palm[1] < 0) p.light(h.palm[0], h.palm[1], C[6], 0.3);
+  }
+  for (const q of pts) {
+    if (q.y > surf) continue;
+    const nx = -Math.sin(q.th), ny = Math.cos(q.th), f = nx * LX + ny * LY, ks = f >= 0 ? 1 : -1, l = ks * q.w;
+    if (q.y - ny * l <= surf) p.px(q.x - nx * l, q.y - ny * l, C[3]);
+    if (q.y + ny * l <= surf) p.px(q.x + nx * l, q.y + ny * l, Math.abs(f) > 0.8 ? C[7] : C[6]);
+  }
+  const base = pts.find((q) => q.y <= surf);
+  if (base) p.line(base.x - base.w - 1.5, surf, base.x + base.w + 1.5, surf, C[5]);
+}
 
-  // motes rising off the pool while it's open
-  cycle(t, 1.8, 10, S + 2, (r) => r.range(0.5, 0.9), (age, life, r) => {
-    if (poolR < 5) return;
-    const k = age / life, x = r.range(-0.9, 0.9) * poolR, y = -age * r.range(18, 30);
-    p.px(x + Math.sin(age * 9 + r.next() * TAU), y, k < 0.5 ? C[6] : C[5]);
+// a hand on the arm's end: a palm, four fingers and a thumb, each two bones with a lit edge and a pale claw
+function drawHand(p, A, pts, C, t) {
+  const tip = pts[pts.length - 1];
+  if (tip.y > A.y - 2) return;
+  const th = tip.th, dx = Math.cos(th), dy = Math.sin(th), nx = -dy, ny = dx, g = gripOf(A, t), side = A.curl;
+  const cx = tip.x + dx * 2.6, cy = tip.y + dy * 2.6;
+  p.shade(cx - 5, cy - 5, cx + 5, cy + 5, (x, y) => {
+    const a = (x - cx) * dx + (y - cy) * dy, b = (x - cx) * nx + (y - cy) * ny, d = (a / 3) ** 2 + (b / 2.7) ** 2;
+    if (d > 1.25) return;
+    if (d > 1) return b * side < 0 ? C[6] : C[3];
+    return b * side < -1 ? C[2] : C[1];
   });
+  const bone = (x0, y0, ang, len, last) => {
+    const x1 = x0 + Math.cos(ang) * len, y1 = y0 + Math.sin(ang) * len, ox = Math.round(-Math.sin(ang) * side * -1), oy = Math.round(Math.cos(ang) * side * -1);
+    p.line(x0, y0, x1, y1, C[1]);
+    p.line(x0 + ox, y0 + oy, x1 + ox, y1 + oy, C[5]);
+    if (last) (p.px(x1, y1, WHITE), p.px(x1 + Math.cos(ang), y1 + Math.sin(ang), C[7]));
+    return [x1, y1];
+  };
+  const spread = 1 - 0.65 * Math.max(0, g), curl = g * 1.2;
+  [-2.2, -0.75, 0.75, 2.2].forEach((o, i) => {
+    const bx = cx + dx * 2.6 + nx * o * 0.9, by = cy + dy * 2.6 + ny * o * 0.9, len = i === 0 || i === 3 ? 2.6 : 3.2;
+    const a0 = th + o * 0.2 * spread, [jx, jy] = bone(bx, by, a0 + curl * side * 0.6, len, false);
+    bone(jx, jy, a0 + curl * side * 1.5, len * 0.85, true);
+  });
+  const [jx, jy] = bone(cx - nx * side * 2.4, cy - ny * side * 2.4, th - side * (1 - 0.6 * g), 2.4, false);
+  bone(jx, jy, th - side * (0.6 - 1.4 * g), 2, true);
+  p.glow(cx, cy, 8, C[5], 0.18 + 0.3 * Math.max(0, g));
+}
+
+export function create(o) {
+  const C = fit(o.palette, 8), DIM = [C[0], C[0], C[1], C[1], C[3], C[4], C[5], C[6]], R = new Rng(o.seed), floor = () => 0;
+  const ps = new Particles({ rng: R, ground: floor, sparks: [C[7], C[6], C[5], C[4]], haze: C[4] });
+  const puffs = new Puffs({ rng: R, flame: [C[7], C[6], C[5], C[4], C[3], C[2], C[1], C[1], C[0]], soot: [mix(C[3], C[2], 0.55), mix(C[2], C[1], 0.5)], cap: mix(C[4], C[2], 0.5), rim: [C[6], C[5], C[4]], floor });
+  const ripples = [], splats = [], lights = [];
+  let t = 0, acc = 0;
+  const rx = (tt) => RX * ease.outCubic(clamp(tt / OPEN)) * (1 - ease.inCubic(clamp((tt - SHUT) / 0.45)));
+  const drops = new Drops({ onLand: (x, y, v, s) => (Math.abs(x) < rx(t) * 0.95 ? ripples.push({ x, t0: t, life: 0.5, w: 0.6 }) : splats.push({ x, t0: t, s })) });
+  // four arms: two at the back, taller and dimmer, two in front; elbows bending toward the middle
+  const LAY = [[-20, -2.5, 1], [17, -2.5, -1], [-30, 2.5, 1], [28, 2.5, -1]];
+  const arms = LAY.map(([x, y, toward], i) => ({
+    x: x + R.range(-3, 3), y, back: y < 0, L: y < 0 ? R.range(44, 52) : R.range(36, 44), W: y < 0 ? R.range(3.2, 3.8) : R.range(3.6, 4.2),
+    lean: -toward * R.range(0.16, 0.3), bend: toward * R.range(0.35, 0.6), curve: toward * R.range(0.05, 0.15), curl: toward,
+    t0: 0.3 + [1, 3, 0, 2][i] * 0.06 + R.range(0, 0.03), td: 1.45 + [2, 0, 3, 1][i] * 0.09 + R.range(0, 0.05), ph: R.range(0, TAU), up: false, shut: false, down: false,
+  }));
+  function splash(x, y, n, k) {
+    for (let i = 0; i < n; i++) drops.add(x + R.range(-2, 2), y - 1, R.range(-70, 70) * k, -R.range(90, 220) * k, R.chance(0.4) ? 2 : 1);
+    ripples.push({ x, t0: t, life: 0.7, w: 1 });
+    lights.push({ x, y: y - 7, r: 30, k: 0.55 * k, life: 0.25, max: 0.25 });
+  }
+  return {
+    update(dt) {
+      t += dt;
+      for (const A of arms) {
+        if (!A.up && t >= A.t0) (A.up = true), splash(A.x, A.y, 12, 1);
+        if (!A.shut && t >= A.t0 + 0.36) {
+          // the clench: a snap of light at the fist, a puff of dark breath, a few sparks
+          A.shut = true;
+          const pts = arm(A, t);
+          if (pts) {
+            const q = pts[pts.length - 1];
+            lights.push({ x: q.x, y: q.y, r: 22, k: 0.7, life: 0.2, max: 0.2 });
+            A.snap = { x: q.x + Math.cos(q.th) * 4, y: q.y + Math.sin(q.th) * 4, t0: t };
+            for (let i = 0; i < 6; i++) {
+              const a = R.range(0, TAU), sp = R.range(60, 130);
+              ps.spawn(P.SPARK, A.snap.x, A.snap.y, Math.cos(a) * sp, Math.sin(a) * sp - 20, R.range(0.12, 0.3));
+            }
+            puffs.spawn(PK.SOOT, A.snap.x, A.snap.y, 0, -12, 0.6, 3.5);
+          }
+        }
+        if (!A.down && t >= A.td + 0.28) (A.down = true), splash(A.x, A.y, 8, 0.7);
+      }
+      const r = rx(t);
+      if (r > 8 && t < SHUT - 0.4) {
+        for (acc += dt * 8; acc > 1; acc--) puffs.spawn(PK.SOOT, R.range(-0.8, 0.8) * r, -R.range(1, 4), R.range(-8, 8), -R.range(14, 28), R.range(0.6, 0.85), R.range(3, 6));
+        if (R.chance(dt * 12)) ps.spawn(P.MOTE, R.range(-0.8, 0.8) * r, -2, R.range(-8, 8), -R.range(30, 70), R.range(0.5, 0.9), R.pick([C[7], C[6], C[5]]), R.range(0.6, 1));
+        if (R.chance(dt * 6)) ps.spawn(P.VAPOUR, R.range(-0.7, 0.7) * r, -R.range(2, 8), R.range(-6, 6), -R.range(10, 22), R.range(0.6, 0.9), R.chance(0.5) ? C[3] : C[4], R.range(3, 6));
+        if (R.chance(dt * 3)) ripples.push({ x: R.range(-0.7, 0.7) * r, t0: t, life: 0.6, w: 0.5 });
+      }
+      for (const a of [ripples, splats]) for (let i = a.length - 1; i >= 0; i--) if (t - a[i].t0 > (a[i].life ?? 0.6)) a.splice(i, 1);
+      for (let i = lights.length - 1; i >= 0; i--) if ((lights[i].life -= dt) <= 0) lights.splice(i, 1);
+      drops.update(dt);
+      puffs.update(dt);
+      ps.update(dt);
+    },
+    drawBack(p) {
+      const r = rx(t), k = r / RX;
+      floorPool(p, C, r, t, ripples);
+      if (k > 0) {
+        p.glow(0, -16, 80, C[4], 0.2 * k);
+        p.glow(0, -8, r * 1.7 + 12, C[4], 0.3 * k);
+        p.glow(0, 0, r * 1.15, C[5], 0.16 * k);
+      }
+      puffs.draw(p, PK.SOOT, { x: 0, y: 6, k, reach: 70 });
+      ps.draw(p, "back");
+      for (const A of arms) if (A.back) {
+        const pts = arm(A, t);
+        if (pts) drawArm(p, A, pts, DIM), drawHand(p, A, pts, DIM, t);
+      }
+    },
+    draw(p) {
+      for (const A of arms) if (!A.back) {
+        const pts = arm(A, t);
+        if (pts) drawArm(p, A, pts, C), drawHand(p, A, pts, C, t);
+      }
+      for (const A of arms) if (A.snap && t - A.snap.t0 < 0.22) {
+        const u = (t - A.snap.t0) / 0.22;
+        ringFast(p, A.snap.x, A.snap.y, 2 + 5 * ease.outCubic(u), 1, u < 0.4 ? C[6] : u < 0.7 ? C[5] : C[3]);
+      }
+      drops.draw(p, C[1], C[5]);
+      for (const s of splats) {
+        const a = 1 - (t - s.t0) / 0.6;
+        p.dot(s.x, -0.5, C[1], a * 1.5);
+        p.dot(s.x + 1, -0.5, C[2], a);
+        p.dot(s.x, -1.5, C[5], a);
+      }
+      ps.draw(p, "front");
+      for (const l of lights) {
+        const q = l.life / l.max;
+        p.glow(l.x, l.y, l.r * (0.6 + 0.4 * q), C[5], l.k * q * q);
+      }
+    },
+  };
 }

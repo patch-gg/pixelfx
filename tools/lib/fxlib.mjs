@@ -59,6 +59,7 @@ export function renderFrames(fx, opts = {}) {
   const bg = bgKind === "none" ? null : backdrop(bgKind, w, h, OY + m);
   const inst = createFx(fx.mod, { x: OX, y: OY, ...(opts.seed !== undefined ? { seed: opts.seed } : {}), ...(opts.options ?? {}) });
   const actor = meta.actor && opts.actor !== false ? inst.options.actor ?? stockActor() : null;
+  const fade = m === 0 && !isScreen(meta);
   const frames = [];
   for (let i = 0; i < n; i++) {
     if (i > 0) inst.update(1 / fps);
@@ -69,6 +70,7 @@ export function renderFrames(fx, opts = {}) {
     inst.draw(shown, "back");
     if (actor) drawActor(painterFor(shown).place(OX, OY, !!opts.options?.flip), actor, actorAlphaOf(fx.mod, fx.meta.loop ? inst.t % fx.meta.duration : Math.min(inst.t, fx.meta.duration), inst.options));
     inst.draw(shown, "front");
+    if (fade) (edgeFade(bare), edgeFade(shown));
     frames.push({
       t: i / fps,
       color: composite(shown, new Uint8ClampedArray(w * h * 4), bg),
@@ -78,6 +80,28 @@ export function renderFrames(fx, opts = {}) {
     });
   }
   return { w, h, fps, n, frames, margin: m };
+}
+
+/** Full-screen effects (transitions, weather, impact frames): 16:9 and at least 320 wide. They fill the screen. */
+export const isScreen = (meta) => meta.size[0] >= 320 && Math.abs(meta.size[0] / meta.size[1] - 16 / 9) < 0.05;
+
+/**
+ * A glow cut off by the canvas edge shows as a box once a frame sits in a game. Ease the light out over the last
+ * E pixels of the canvas, in place. Colour is left alone.
+ */
+export function edgeFade(f, E = 8) {
+  const { w, h, light: L } = f;
+  for (let y = 0; y < h; y++) {
+    const ey = Math.min(y, h - 1 - y);
+    for (let x = 0; x < w; x++) {
+      const e = Math.min(ey, x, w - 1 - x);
+      if (e >= E) { x = w - 1 - E; continue; }
+      const i = y * w + x, l = L[i];
+      if (!(l & 0xffffff)) continue;
+      const u = (e + 0.5) / E, k = u * u * (3 - 2 * u);
+      L[i] = (l & 0xff000000) | Math.round((l & 255) * k) | (Math.round(((l >>> 8) & 255) * k) << 8) | (Math.round(((l >>> 16) & 255) * k) << 16);
+    }
+  }
 }
 
 /** Nearest-neighbour upscale of RGBA. */

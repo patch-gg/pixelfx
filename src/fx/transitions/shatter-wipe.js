@@ -1,207 +1,280 @@
-import { PAL, hex, ease, seg, clamp, lerp, rand, burst, fly, TAU, WHITE } from "../../core/index.js";
-import { screenMeta, screen, fill, onScreen, clipLine, W, H, accents } from "./_lib.js";
+// The impact flash, cracks racing out from the impact, the white flash before the burst, and the glass
+// splinters, glints and cold light of the burst are adapted from Sprite Fusion's open-source ice shatter
+// (https://www.spritefusion.com/pixel-art-vfx/ice), MIT License, Copyright (c) 2026 Hugo Duprez.
+import { Particles, Bits, Lights, P, B, Rng, fit, hex, mix, clamp, smooth, sparkle, flare, TAU, WHITE } from "../../core/index.js";
+import { W, H, screenMeta, clipTo, fillConvex, rect } from "./_lib.js";
 
 export const meta = screenMeta({
   name: "Shatter wipe",
-  desc: "A dark pane drops over the screen, cracks race out from an impact with a flash, and the glass breaks into glinting shards that tumble away.",
-  tags: ["shatter", "glass", "break", "wipe"],
-  duration: 2,
-  options: { palette: PAL.ice, rays: 12 },
+  desc: "A dark glass pane drops over the screen and bounces; cracks race out from an impact with a flash, then it bursts into tumbling glass shards with lit edges that fall away.",
+  tags: ["shatter", "glass", "break", "shards", "wipe"],
+  duration: 2.8,
+  options: { palette: ["#0c1430", "#162c5c", "#1f4f94", "#2f7fcc", "#58b4ec", "#9bdcff", "#d8f4ff", "#ffffff"], seed: 2 },
 });
 
-// where a ray from (cx, cy) leaves the screen, and on which side (0 top, 1 right, 2 bottom, 3 left)
-function exit(cx, cy, a) {
-  const dx = Math.cos(a), dy = Math.sin(a);
-  let best = Infinity, side = 0;
-  if (dy < 0 && -cy / dy < best) (best = -cy / dy), (side = 0);
-  if (dx > 0 && (W - cx) / dx < best) (best = (W - cx) / dx), (side = 1);
-  if (dy > 0 && (H - cy) / dy < best) (best = (H - cy) / dy), (side = 2);
-  if (dx < 0 && -cx / dx < best) (best = -cx / dx), (side = 3);
-  return { d: best, side };
-}
-const CORNER = [[W, 0], [W, H], [0, H], [0, 0]]; // the corner after each side, going clockwise
+const D = meta.duration, LAND = 0.55, GP = (2 * H) / (LAND * LAND), REST = 0.3, CRACK = 1.32, BREAK = 1.62, WAVE = 520;
+const LX = -0.6, LY = -0.8; // light comes from the top left
+const L3 = [-0.42, -0.56, 0.71]; // and a little from the front, for the faces
 
-// a crack from a to b with a kink or two, the same for both shards that share it
-function jag(seed, id, a, b) {
-  const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy), m = L > 22 ? 2 : 1, out = [a];
-  for (let k = 1; k <= m; k++) {
-    const f = k / (m + 1) + (rand(seed, id, k, 1) - 0.5) * 0.15, off = (rand(seed, id, k, 2) - 0.5) * Math.min(10, L * 0.28);
-    out.push([a[0] + dx * f - (dy / (L || 1)) * off, a[1] + dy * f + (dx / (L || 1)) * off]);
-  }
-  out.push(b);
+// the pane's top edge over time: it falls from above the screen, lands, bounces twice and settles
+const BOUNCES = (() => {
+  const out = [];
+  let t0 = LAND, v = GP * LAND * REST;
+  for (let k = 0; k < 3; k++) out.push({ t0, v, T: (2 * v) / GP }), (t0 += (2 * v) / GP), (v *= REST);
   return out;
+})();
+function paneY(t) {
+  if (t < LAND) return -H + 0.5 * GP * t * t;
+  for (const b of BOUNCES) if (t < b.t0 + b.T) return -(b.v * (t - b.t0) - 0.5 * GP * (t - b.t0) ** 2);
+  return 0;
 }
 
-// the break: jagged rays out of the impact, crossed by rings that follow the screen's shape (cached per seed)
-const cache = new Map();
-function pattern(seed, NR) {
-  const key = seed + ":" + NR;
-  if (cache.has(key)) return cache.get(key);
-  const cx = W * (0.38 + 0.14 * rand(seed, 1)), cy = H * (0.34 + 0.18 * rand(seed, 2));
-  const F = [0, 0.17, 0.4, 0.68, 1], J = F.length - 1;
-  const rays = [];
-  for (let i = 0; i < NR; i++) {
-    const a = ((i + (rand(seed, i, 3) - 0.5) * 0.55) / NR) * TAU, ex = exit(cx, cy, a);
-    const vs = F.map((f, j) => {
-      const r = j === 0 ? 0 : j === J ? ex.d : ex.d * f * (0.82 + 0.36 * rand(seed, i, j, 4));
-      return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
-    });
-    rays.push({ vs, side: ex.side });
-  }
-  // radial cracks rad[i][j]: ring j to j+1 along ray i; ring cracks ring[i][j]: ray i to ray i+1 on ring j
-  const rad = rays.map((ray, i) => F.slice(0, J).map((_, j) => jag(seed, i * 10 + j, ray.vs[j], ray.vs[j + 1])));
-  const ring = rays.map((ray, i) => F.map((_, j) => (j === 0 || j === J ? null : jag(seed, 500 + i * 10 + j, ray.vs[j], rays[(i + 1) % NR].vs[j]))));
-  const shards = [];
-  for (let i = 0; i < NR; i++) {
-    const i1 = (i + 1) % NR;
-    for (let j = 0; j < J; j++) {
-      const pts = [];
-      if (j > 0) pts.push(...ring[i][j].slice(0, -1));
-      pts.push(...rad[i1][j].slice(0, -1));
-      if (j + 1 === J) {
-        // the outer shard follows the screen's border round any corners between its rays
-        pts.push(rays[i1].vs[J]);
-        for (let s = rays[i1].side; s !== rays[i].side; s = (s + 3) % 4) pts.push(CORNER[(s + 3) % 4]);
-      } else pts.push(...ring[i][j + 1].slice(1).reverse());
-      pts.push(...rad[i][j].slice(1).reverse());
-      const mx = pts.reduce((s, v) => s + v[0], 0) / pts.length, my = pts.reduce((s, v) => s + v[1], 0) / pts.length;
-      const r = (k) => rand(seed, i, j, 7, k), near = clamp(Math.hypot((mx - cx) / W, (my - cy) / H) * 1.7);
-      shards.push({
-        pts, mx, my, start: 0.53 + 0.1 * near + 0.03 * r(1),
-        vx: (mx - cx) * 0.7 + (r(2) - 0.5) * 30, vy: -25 * r(3) + (my - cy) * 0.4, spin: (r(4) - 0.5) * 6, ph: r(5) * TAU,
-      });
+// the break: jagged rays out of the impact crossed by rings, every crack shared by the two cells it splits
+function pattern(R) {
+  const Ix = W * R.range(0.4, 0.6), Iy = H * R.range(0.36, 0.54), NR = 13, RING = [0, 9, 21, 37, 58, 86, 122, 168, 232];
+  const ang = Array.from({ length: NR }, (_, i) => ((i + R.range(-0.3, 0.3)) / NR) * TAU), speed = ang.map(() => R.range(800, 1300));
+  const V = ang.map((a) => RING.map((r, j) => {
+    if (!j) return [Ix, Iy];
+    const rr = r * R.range(0.84, 1.16), aa = a + R.range(-0.07, 0.07);
+    return [Ix + Math.cos(aa) * rr, Iy + Math.sin(aa) * rr];
+  }));
+  const jag = (A, Bp) => {
+    const dx = Bp[0] - A[0], dy = Bp[1] - A[1], L = Math.hypot(dx, dy) || 1, n = L > 18 ? 2 : 1, out = [A];
+    for (let k = 1; k <= n; k++) {
+      const f = k / (n + 1) + R.range(-0.08, 0.08), off = R.range(-1, 1) * Math.min(3, L * 0.07);
+      out.push([A[0] + dx * f - (dy / L) * off, A[1] + dy * f + (dx / L) * off]);
     }
-  }
-  // rasterize every shard once: a mask with its edges marked (1 faces up-left, 2 the rest), and which shard
-  // owns each screen pixel
-  const owner = new Int16Array(W * H).fill(-1);
-  shards.forEach((sh, si) => {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const [x, y] of sh.pts) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (y0 = Math.min(y0, y)), (y1 = Math.max(y1, y));
-    x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0)); x1 = Math.min(W - 1, Math.ceil(x1)); y1 = Math.min(H - 1, Math.ceil(y1));
-    const w = x1 - x0 + 1, h = y1 - y0 + 1, m = new Uint8Array(w * h), n = sh.pts.length;
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++) {
-        const px = x0 + x + 0.5, py = y0 + y + 0.5;
-        let inside = false;
-        for (let a = 0, b = n - 1; a < n; b = a++) {
-          const [xa, ya] = sh.pts[a], [xb, yb] = sh.pts[b];
-          if (ya > py !== yb > py && px < ((xb - xa) * (py - ya)) / (yb - ya) + xa) inside = !inside;
-        }
-        if (inside) (m[y * w + x] = 1), (owner[(y0 + y) * W + x0 + x] = si);
-      }
-    const In = (x, y) => x >= 0 && y >= 0 && x < w && y < h && m[y * w + x] > 0;
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++)
-        if (m[y * w + x]) m[y * w + x] = !In(x, y - 1) || !In(x - 1, y) ? 2 : !In(x, y + 1) || !In(x + 1, y) ? 3 : 1;
-    Object.assign(sh, { x0, y0, w, h, m });
-  });
-  // a pixel center that no shard claimed (right on a crack) goes to its neighbour
-  for (let i = 0; i < owner.length; i++) if (owner[i] < 0) owner[i] = owner[i - 1] ?? owner[i - W] ?? 0;
-  const v = { cx, cy, rad, ring, shards, J, F, NR, owner };
-  cache.set(key, v);
-  return v;
-}
-
-export function draw(p, t, o) {
-  const C = accents(o.palette), ink = hex(o.color), n = C.length, D = meta.duration, u = t / D, S = o.seed;
-  if (u >= 1) return;
-  const { cx, cy, rad, ring, shards, J, F, NR, owner } = pattern(S, Math.max(5, o.rays | 0));
-  const glint = C[n - 2], edge = C[n - 3], dark = C[Math.min(1, n - 1)], deep = C[0];
-  // 1. the pane drops in, lands with one small bounce; a faint sheen rides on it
-  if (u < 0.44) {
-    const s = seg(u, 0.04, 0.4), yb = H * (s < 0.72 ? (s / 0.72) ** 2 : 1 - 0.07 * Math.sin((Math.PI * (s - 0.72)) / 0.28));
-    if (yb < 0.5) return;
-    const sheen = 1 - seg(u, 0.3, 0.4);
-    screen(p, (x, y, o2) => {
-      if (y > yb) return;
-      const q = x - 30 - (y - yb + H) * 0.75;
-      if ((q > 0 && q < 6) || (q > 10 && q < 12)) {
-        if (sheen <= 0) return ink;
-        // the sheen dithers away once the pane has landed (drawn twice: ink under, sheen over)
-        return Math.floor(x) % 2 === Math.floor(y) % 2 || sheen > 0.5 ? dark : ink;
-      }
-      return ink;
-    });
-    if (yb < H - 0.5) p.rect(0, Math.floor(yb), W, 1, edge);
-    return;
-  }
-  // 2. a brief hold, then the cracks race out from the impact
-  if (u < 0.53) {
-    fill(p, ink);
-    const c = ease.outQuart(seg(u, 0.44, 0.5));
-    if (c <= 0) return;
-    const hot = u < 0.48;
-    for (let i = 0; i < NR; i++)
-      for (let j = 0; j < J; j++) {
-        if (c <= F[j]) break;
-        const k = clamp((c - F[j]) / (F[j + 1] - F[j])), path = rad[i][j];
-        // draw the crack only as far as it has run
-        const segs = path.length - 1, upto = k * segs;
-        for (let q = 0; q < segs && q < upto; q++) {
-          const [x0, y0] = path[q], [x1, y1] = path[q + 1], f = clamp(upto - q);
-          clipLine(p, x0, y0, lerp(x0, x1, f), lerp(y0, y1, f), hot ? WHITE : glint);
-        }
-      }
-    // a few ring cracks join up behind them
-    for (let i = 0; i < NR; i++)
-      for (let j = 1; j < J; j++) {
-        if (c < F[j] + 0.15 || rand(S, i, j, 9) > 0.55) continue;
-        const path = ring[i][j];
-        for (let q = 1; q < path.length; q++) clipLine(p, path[q - 1][0], path[q - 1][1], path[q][0], path[q][1], edge);
-      }
-    const fl = 1 - seg(u, 0.44, 0.48);
-    if (fl > 0) {
-      p.circle(cx, cy, 1 + 4 * fl, WHITE);
-      p.glow(cx, cy, 34, C[n - 3], 0.7 * fl);
-    }
-    // glass dust puffs out of the impact
-    burst(10, S + 3, (r) => {
-      const age = (u - 0.44) * D, life = r.range(0.15, 0.3);
-      if (age < 0 || age > life) return;
-      const a = r.range(0, TAU), sp = r.range(30, 70), [x, y] = fly(cx, cy, Math.cos(a) * sp, Math.sin(a) * sp, age, 80, 4);
-      if (onScreen(x, y)) p.px(x, y, age / life < 0.5 ? WHITE : glint);
-    });
-    return;
-  }
-  // 3. the glass falls: shards nearest the impact go first, tumbling and catching the light as they drop
-  const fade = 1 - seg(u, 0.96, 1);
-  screen(p, (x, y) => {
-    const si = owner[Math.floor(y) * W + Math.floor(x)];
-    if (u < shards[si].start) return ink;
-  });
-  // the cracks between shards still in place: radial ones, and the ring ones that showed when it broke
-  const crack = (path) => {
-    for (let q = 1; q < path.length; q++) clipLine(p, path[q - 1][0], path[q - 1][1], path[q][0], path[q][1], edge);
+    out.push(Bp);
+    return out;
   };
-  for (let i = 0; i < NR; i++)
-    for (let j = 0; j < J; j++) {
-      const a = shards[i * J + j], b = shards[((i + NR - 1) % NR) * J + j];
-      if (u < a.start || u < b.start) crack(rad[i][j]);
-      if (j > 0 && rand(S, i, j, 9) <= 0.55 && (u < a.start || u < shards[i * J + j - 1].start)) crack(ring[i][j]);
-    }
-  for (const s of shards) {
-    if (u < s.start) continue;
-    const a = (u - s.start) * D, th = s.spin * a, cs = Math.cos(th), sn = Math.sin(th);
-    const ox = s.vx * a, oy = s.vy * a + 0.5 * 950 * a * a, px = s.mx + ox, py = s.my + oy;
-    // where the shard's box lands, then each screen pixel there looks back into the shard's mask
-    let X0 = Infinity, Y0 = Infinity, X1 = -Infinity, Y1 = -Infinity;
-    for (const [qx, qy] of [[s.x0, s.y0], [s.x0 + s.w, s.y0], [s.x0, s.y0 + s.h], [s.x0 + s.w, s.y0 + s.h]]) {
-      const rx = qx - s.mx, ry = qy - s.my, X = px + rx * cs - ry * sn, Y = py + rx * sn + ry * cs;
-      (X0 = Math.min(X0, X)), (X1 = Math.max(X1, X)), (Y0 = Math.min(Y0, Y)), (Y1 = Math.max(Y1, Y));
-    }
-    X0 = Math.max(0, Math.floor(X0)); Y0 = Math.max(0, Math.floor(Y0)); X1 = Math.min(W - 1, Math.ceil(X1)); Y1 = Math.min(H - 1, Math.ceil(Y1));
-    if (X0 > X1 || Y0 > Y1) continue;
-    // as a shard turns it flashes: a lighter fill and bright edges while it faces the light
-    const face = Math.cos(th * 1.6 + s.ph), lit = face > 0.2;
-    const fillC = face > 0.75 ? dark : lit ? deep : ink, upC = lit ? glint : edge, downC = lit ? edge : deep;
-    for (let Y = Y0; Y <= Y1; Y++)
-      for (let X = X0; X <= X1; X++) {
-        const dx = X + 0.5 - px, dy = Y + 0.5 - py;
-        const mx = Math.floor(s.mx + dx * cs + dy * sn) - s.x0, my = Math.floor(s.my - dx * sn + dy * cs) - s.y0;
-        if (mx < 0 || my < 0 || mx >= s.w || my >= s.h) continue;
-        const k = s.m[my * s.w + mx];
-        if (k) p.dot(X, Y, k === 2 ? upC : k === 3 ? downC : fillC, fade);
+  const rad = V.map((v) => v.slice(0, -1).map((A, j) => jag(A, v[j + 1])));
+  const ring = V.map((v, i) => v.map((A, j) => (j ? jag(A, V[(i + 1) % NR][j]) : null)));
+  // real glass breaks into long wedges: rings near the impact are whole, further out they're broken arcs
+  const keep = V.map(() => RING.map((_, j) => j <= 2 || j === RING.length - 1 || R.chance(0.78 - 0.07 * j)));
+  // when a crack gets to each pixel: rays race out at their own speed, rings snap across once both rays pass
+  const cracks = [], reach = (i, x, y) => CRACK + Math.hypot(x - Ix, y - Iy) / speed[i];
+  const trace = (pts, when) => {
+    for (let k = 1; k < pts.length; k++) {
+      const [ax, ay] = pts[k - 1], [bx, by] = pts[k], n = Math.ceil(Math.hypot(bx - ax, by - ay) * 2);
+      for (let s = 0; s < n; s++) {
+        const x = ax + ((bx - ax) * s) / n, y = ay + ((by - ay) * s) / n;
+        if (x >= 0 && y >= 0 && x < W && y < H) cracks.push({ x: Math.floor(x), y: Math.floor(y), t0: when(x, y) });
       }
+    }
+  };
+  for (let i = 0; i < NR; i++) for (const e of rad[i]) trace(e, (x, y) => reach(i, x, y));
+  for (let i = 0; i < NR; i++)
+    for (let j = 1; j < RING.length - 1; j++) {
+      if (!keep[i][j]) continue;
+      const i2 = (i + 1) % NR, e = ring[i][j], start = Math.max(reach(i, ...V[i][j]), reach(i2, ...V[i2][j])) + R.range(0.02, 0.07);
+      const [ax, ay] = e[0];
+      trace(e, (x, y) => start + Math.hypot(x - ax, y - ay) / 420);
+    }
+  cracks.sort((a, b) => a.t0 - b.t0);
+  const cells = [];
+  for (let i = 0; i < NR; i++)
+    for (let j = 0, jb; j < RING.length - 1; j = jb + 1) {
+      // a wedge from ring j out to the next ring crack that's there
+      for (jb = j; !keep[i][jb + 1]; jb++);
+      const i2 = (i + 1) % NR, side = (r) => rad[r].slice(j, jb + 1).flatMap((e, k) => (k ? e.slice(1) : e));
+      const pts = [...side(i), ...ring[i][jb + 1].slice(1), ...side(i2).reverse().slice(1)];
+      if (j) pts.push(...ring[i][j].slice().reverse().slice(1, -1));
+      else pts.pop();
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, cx = 0, cy = 0;
+      for (const [x, y] of pts) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (y0 = Math.min(y0, y)), (y1 = Math.max(y1, y)), (cx += x), (cy += y);
+      if (x1 < 0 || y1 < 0 || x0 >= W || y0 >= H) continue;
+      // a shard of what's on screen: centered on the visible part, so it spins about what you see
+      cx = (clamp(x0, 0, W) + clamp(x1, 0, W)) / 2;
+      cy = (clamp(y0, 0, H) + clamp(y1, 0, H)) / 2;
+      const d = Math.hypot(cx - Ix, cy - Iy);
+      cells.push({ pts, lp: pts.map(([x, y]) => [x - cx, y - cy]), cx, cy, d, r: Math.hypot(x1 - x0, y1 - y0) / 2, tb: BREAK + d / WAVE + R.range(0, 0.04) });
+    }
+  return { Ix, Iy, cracks, cells };
+}
+
+export function create(o) {
+  const C = fit(o.palette, 8), ink = hex(o.color), R = new Rng(o.seed), pat = pattern(R), { Ix, Iy } = pat;
+  const ps = new Particles({ rng: R, sparks: [C[7], C[6], C[5], C[4]], haze: C[5] });
+  const bits = new Bits(), lights = new Lights();
+  let t = 0, bounce = -1, struck = false, burst = false;
+  const end = D - 0.05;
+
+  // glass splinters thrown from (x, y): little white-tipped streaks that tumble and fall
+  const splinters = (x, y, n, vx, vy, spread, sp0, sp1) => {
+    for (let i = 0; i < n; i++) {
+      const a = Math.atan2(vy, vx) + R.range(-spread, spread), sp = R.range(sp0, sp1), life = Math.min(R.range(0.6, 1.2), end - t);
+      if (life > 0.2) bits.add({ kind: B.SHARD, x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 0.8, drag: 0.6, life, a: R.range(0, TAU), va: R.range(-20, 20), s: R.range(1.5, 3.5), c: R.pick([C[7], C[6], C[5]]) });
+    }
+  };
+  const glint = (x, y, s = R.range(1, 2.4)) => ps.spawn(P.STAR, x, y, R.range(-8, 8), R.range(-10, 4), Math.min(R.range(0.3, 0.6), end - t), R.chance(0.5) ? WHITE : C[6], s);
+
+  return {
+    update(dt) {
+      t += dt;
+      // each landing: chips spring off the bottom edge, glints, a cold flash along it
+      while (bounce + 1 < BOUNCES.length && t >= BOUNCES[bounce + 1].t0) {
+        const k = BOUNCES[++bounce].v / BOUNCES[0].v;
+        if (k < 0.05) continue;
+        for (let i = 0; i < 5; i++) lights.add(W * (i + 0.5) / 5, H - 2, 70, C[5], 0.5 * k, 0.35);
+        for (let i = 0; i < Math.round(26 * k); i++) splinters(R.range(4, W - 4), H - 1, 1, R.range(-0.4, 0.4), -1, 0.5, 120 * k, 330 * k);
+        for (let i = 0; i < Math.round(9 * k); i++) glint(R.range(8, W - 8), H - R.range(2, 10));
+      }
+      if (!struck && t >= CRACK) {
+        // the blow: a white flash at the point of impact, a puff of splinters back off the glass
+        struck = true;
+        lights.add(Ix, Iy, 90, C[5], 0.8, 0.35);
+        lights.add(Ix, Iy, 34, WHITE, 0.9, 0.1);
+        splinters(Ix, Iy, 16, 0, -1, Math.PI, 60, 240);
+        for (let i = 0; i < 5; i++) ps.spawn(P.VAPOUR, Ix, Iy, R.range(-40, 40), R.range(-40, 30), R.range(0.35, 0.6), C[6], R.range(2, 3.5));
+      }
+      // while the cracks run, glints chase their tips
+      if (t > CRACK && t < BREAK && R.chance(0.12)) {
+        const c = pat.cracks[R.int(0, pat.cracks.length - 1)];
+        if (c.t0 < t) glint(c.x, c.y, R.range(0.6, 1.6));
+      }
+      if (!burst && t >= BREAK) {
+        // the burst: a cold flash, a spray of splinters and a breath of glass dust out of the impact
+        burst = true;
+        lights.add(Ix, Iy, 170, C[4], 0.55, 0.5);
+        lights.add(Ix, Iy, 60, WHITE, 0.8, 0.14);
+        splinters(Ix, Iy, 46, 0, -1, Math.PI, 90, 340);
+        for (let i = 0; i < 14; i++) {
+          const a = R.range(0, TAU), sp = R.range(30, 110);
+          ps.spawn(P.VAPOUR, Ix + Math.cos(a) * 4, Iy + Math.sin(a) * 4, Math.cos(a) * sp, Math.sin(a) * sp, R.range(0.45, 0.8), R.chance(0.6) ? C[6] : C[5], R.range(3, 6));
+        }
+      }
+      // the pane bursts outward from the impact: each shard flies off, tumbling, and falls away from the screen
+      for (const s of pat.cells) {
+        if (!s.broke && t >= s.tb) {
+          s.broke = true;
+          const dx = s.cx - Ix, dy = s.cy - Iy, d = Math.hypot(dx, dy) || 1, sp = R.range(40, 130) * (1.15 - Math.min(1, s.d / 260));
+          s.vx = (dx / d) * sp + R.range(-15, 15);
+          s.vy = (dy / d) * sp * 0.6 - R.range(20, 90);
+          s.a = 0;
+          s.va = R.range(-2.5, 2.5) * (1 + 20 / (s.r + 10));
+          s.phi = 0;
+          s.vphi = R.sign() * R.range(3, 9);
+          s.psi = R.range(0, TAU);
+          s.z = 0;
+          s.vz = R.range(0.25, 0.7);
+          s.g = R.range(0.85, 1.1);
+          s.edgeOn = false;
+          splinters(s.cx, s.cy, s.r > 24 ? 4 : 2, s.vx, s.vy, 1.2, 60, 220);
+          if (R.chance(0.15)) glint(s.cx + R.range(-4, 4), s.cy + R.range(-4, 4));
+        }
+        if (!s.broke || s.gone) continue;
+        s.vy += 950 * s.g * dt;
+        s.vx -= s.vx * 0.3 * dt;
+        s.cx += s.vx * dt;
+        s.cy += s.vy * dt;
+        s.a += s.va * dt;
+        s.phi += s.vphi * dt;
+        s.z += s.vz * dt;
+        // turning edge-on to us it flashes: a glint where the light catches the glass
+        const on = Math.abs(Math.cos(s.phi)) < 0.2;
+        if (on && !s.edgeOn && t < end - 0.3) glint(s.cx, s.cy, R.range(1.4, 2.6));
+        s.edgeOn = on;
+        if (s.cy - s.r / (1 + s.z) > H + 2) s.gone = true;
+      }
+      ps.update(dt);
+      bits.update(dt);
+      lights.update(dt);
+    },
+    draw(p0) {
+      const p = clipTo(p0);
+      if (t < BREAK) {
+        // the pane: dark glass, a lit bevel along its falling edge, faint reflections that fade once it settles
+        const yb = paneY(t) + H, r1 = Math.min(H, Math.floor(yb));
+        if (r1 > 0) {
+          rect(p0, 0, 0, W, r1, ink);
+          const shine = 1 - smooth(0.98, 1.22, t), y0 = yb - H;
+          if (shine > 0) {
+            for (const [off, w, a] of [[0, 16, 0.05], [22, 3, 0.1], [30, 1, 0.12]])
+              for (let y = 0; y < r1; y++) {
+                const xc = W * 0.18 + off + (H - (y - y0)) * 0.7;
+                for (let x = Math.max(0, Math.floor(xc - w / 2)); x < Math.min(W, Math.ceil(xc + w / 2)); x++) p0.blend(x + 0.5, y + 0.5, C[6], a * shine);
+              }
+            const st = shine > 0.66 ? 0 : shine > 0.33 ? 1 : 2;
+            for (const [dy, c] of [[1, C[6 - st * 2]], [2, C[4 - st]], [3, C[Math.max(1, 2 - st)]]]) if (r1 - dy >= 0 && r1 - dy < H) rect(p0, 0, r1 - dy, W, 1, c);
+            // light runs along the edge as it falls, and spills onto the picture below it
+            const gx = W * clamp(t / (LAND + 0.25)) * 1.2 - 20;
+            for (let x = 0; x < W; x++) {
+              const k = Math.max(0, 1 - Math.abs(x - gx) / 28);
+              if (k > 0 && r1 - 1 < H) p0.px(x, r1 - 1, k > 0.5 ? WHITE : C[6]), p0.light(x, r1 - 1, C[6], 0.5 * k);
+              for (let d = 0; d < 14 && r1 + d < H; d++) p0.light(x, r1 + d, C[5], 0.3 * shine * (1 - d / 14) ** 2 * (0.6 + 0.8 * k));
+            }
+            if (t < LAND + 0.25 && gx > 0 && gx < W && r1 - 1 < H) sparkle(p, gx, r1 - 1, 6, C[6], C[4], 0.5);
+          }
+        }
+        // the cracks race out from the impact: white at the tip, cooling to ice, each with its shadow
+        if (t >= CRACK) {
+          for (const c of pat.cracks) {
+            if (c.t0 > t) break;
+            const age = t - c.t0;
+            if (c.x + 1 < W && c.y + 1 < H) p0.px(c.x + 1, c.y + 1, C[1]);
+            p0.px(c.x, c.y, age < 0.04 ? WHITE : age < 0.18 ? C[6] : C[5]);
+            if (age < 0.3) p0.light(c.x, c.y, C[5], 0.55 * (1 - age / 0.3));
+          }
+          const u = (t - CRACK) / 0.22;
+          if (u < 1) {
+            flare(p, Ix, Iy, 30 * Math.pow(1 - u, 1.5), 1 - u, C);
+            p.glow(Ix, Iy, 50, WHITE, 0.7 * (1 - u));
+          }
+          // a beat before the burst, the cracks flare white
+          const w = (t - (BREAK - 0.07)) / 0.07;
+          if (w > 0) for (const c of pat.cracks) p0.px(c.x, c.y, WHITE), p0.light(c.x, c.y, C[6], 0.4 * w);
+        }
+      } else {
+        // shards still in place first (the pane breaking up outward), then the falling ones, nearest last
+        const fall = pat.cells.filter((s) => s.broke && !s.gone).sort((a, b) => b.z - a.z);
+        for (const s of pat.cells) if (!s.broke) drawShard(p, p0, s, C, ink, true);
+        for (const s of fall) drawShard(p, p0, s, C, ink, false);
+      }
+      bits.draw(p);
+      ps.draw(p);
+      lights.draw(p);
+    },
+  };
+}
+
+// a shard: dark glass that tumbles about an axis in its plane (squashing as it turns, a bright sliver
+// edge-on), its edges lit where they face the light, its face catching a cool sheen as it turns to it
+function drawShard(p, p0, s, C, ink, still) {
+  let pts, face = ink, sliver = false, gl = 0;
+  if (still) pts = s.pts;
+  else {
+    const cp = Math.cos(s.phi), sp = Math.sin(s.phi), ci = Math.cos(s.psi), si = Math.sin(s.psi), ca = Math.cos(s.a), sa = Math.sin(s.a), k = 1 / (1 + s.z);
+    pts = s.lp.map(([x, y]) => {
+      const u = x * ci + y * si, v = (-x * si + y * ci) * cp, qx = u * ci - v * si, qy = u * si + v * ci;
+      return [s.cx + (qx * ca - qy * sa) * k, s.cy + (qx * sa + qy * ca) * k];
+    });
+    // the face's normal, turned by the tumble and the spin, against the light
+    const nx0 = si * sp, ny0 = -ci * sp, nz = cp, nx = nx0 * ca - ny0 * sa, ny = nx0 * sa + ny0 * ca;
+    const d = Math.abs(nx * L3[0] + ny * L3[1] + nz * L3[2]);
+    gl = Math.pow(d, 6);
+    // turning toward edge-on the glass reflects more (a grazing sheen), and a hairline sliver goes bright
+    const graze = clamp(1 - Math.abs(cp) / 0.3) ** 2;
+    face = mix(mix(ink, C[2], 0.12 + 0.4 * gl), C[3], 0.55 * graze);
+    sliver = Math.abs(cp) < 0.2;
+    if (Math.abs(cp) * s.r < 1.5) face = C[5];
+  }
+  fillConvex(p0, pts, face);
+  let a2 = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a2 += pts[j][0] * pts[i][1] - pts[i][0] * pts[j][1];
+  const sg = a2 > 0 ? 1 : -1;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [ax, ay] = pts[j], [bx, by] = pts[i], dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy);
+    if (L < 0.5) continue;
+    const mx = (dy / L) * sg, my = (-dx / L) * sg, el = mx * LX + my * LY;
+    if (still) {
+      // a crack in the pane: lit fracture line, its shadow below
+      p.line(ax, ay, bx, by, el > 0 ? C[5] : C[4]);
+      continue;
+    }
+    if (el > 0.2 || sliver) {
+      p.line(ax - mx, ay - my, bx - mx, by - my, C[4]);
+      p.line(ax, ay, bx, by, gl > 0.5 || sliver ? WHITE : C[6]);
+      p.glow((ax + bx) / 2, (ay + by) / 2, Math.min(12, 4 + L * 0.3), C[5], 0.12 + 0.3 * gl);
+    } else p.line(ax, ay, bx, by, el > -0.3 ? C[4] : C[2]);
   }
 }

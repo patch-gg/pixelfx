@@ -1,70 +1,102 @@
-import { PAL, cycle, clamp, tileNoise, TAU, WHITE } from "../../core/index.js";
-import { fit, sparkle } from "./_lib.js";
+// The beam (banded across, pulses running down it, sine strands that brighten in front, a source flare with
+// spinning rays, an end flare spraying rays and sparks) is adapted from Sprite Fusion's open-source energy beam
+// (https://www.spritefusion.com/pixel-art-vfx/energy), MIT License, Copyright (c) 2026 Hugo Duprez.
+import { PAL, fit, cycle, fly, flyV, loopNoise, fract, ease, sparkle, TAU, WHITE } from "../../core/index.js";
+import { bayer, mote } from "./_lib.js";
+
+const D = 1.2, HX = 15, HY = -24, L = 168, W = 6;
 
 export const meta = {
   name: "Arcane beam",
-  desc: "A continuous violet beam firing right: a white-hot core in a wobbling sheath, two strands twisting round it, a flaring source and a splash at the end.",
-  tags: ["arcane", "beam", "laser", "channel", "magic", "directional", "loop"],
-  size: [132, 40],
-  origin: [13, 19],
-  duration: 0.8,
+  desc: "A beam fires right from the hand: a white core, strands twisting round it, pulses running down it, a flaring source and an end that sprays sparks.",
+  tags: ["arcane", "beam", "laser", "ray", "magic", "directional", "loop"],
+  size: [264, 100],
+  origin: [26, 84],
+  duration: D,
   loop: true,
   fps: 30,
-  bg: "dark",
-  options: { palette: PAL.arcane, length: 104, width: 4, seed: 15 },
+  bg: "ground",
+  actor: 2,
+  options: { palette: PAL.arcane, seed: 10 },
 };
 
 export function draw(p, t, o) {
-  const C = fit(o.palette), L = o.length, W = o.width, S = o.seed, ph = t / meta.duration;
-  // the beam's spine sways more the further it gets from the hand; every motion is a whole number of waves a loop
-  const spine = (x) => Math.sin(x * 0.07 - ph * TAU * 2) * 1.6 * clamp(x / 40);
-  const half = (x) => W * (0.85 + 0.25 * Math.sin(x * 0.3 - ph * TAU * 4)) + 0.6 * tileNoise(x * 0.25 - ph * 16, 0, 16, 0, S);
-  // strands behind the beam
-  const strand = (x, k) => spine(x) + (half(x) + 2.5) * Math.sin(x * 0.18 - ph * TAU * 3 + k * Math.PI);
-  const depth = (x, k) => Math.cos(x * 0.18 - ph * TAU * 3 + k * Math.PI);
-  const strands = (front) => {
-    for (let x = 5; x < L - 3; x++)
-      for (let k = 0; k < 2; k++) {
-        const d = depth(x + 0.5, k);
-        if (d >= 0 !== front) continue;
-        p.line(x, strand(x, k), x + 1, strand(x + 1, k), front ? (d > 0.6 ? C[6] : C[5]) : C[3]);
-      }
-  };
-  strands(false);
-  // the body: core, sheath and a ragged edge, scrolling
-  p.shade(0, -W * 2 - 4, L + 1, W * 2 + 4, (x, y, out) => {
-    if (x < 0 || x > L) return;
-    const v = Math.abs(y - spine(x)) / half(x), flick = tileNoise(x * 0.35 - ph * 24, y * 0.5, 24, 0, S + 1) * 0.12;
-    const tipFade = clamp((L - x) / 6);
-    const lvl = v - flick + (1 - tipFade) * 0.6;
-    if (lvl > 1.2) return;
-    out.c = lvl < 0.2 ? WHITE : lvl < 0.45 ? C[6] : lvl < 0.72 ? C[5] : lvl < 0.98 ? C[4] : C[3];
-    out.k = 0.12;
-  });
-  // strands in front
-  strands(true);
-  // motes streaming along it, faster than the eye can follow
-  cycle(t, meta.duration, 10, S, (r) => r.range(0.25, 0.45), (age, life, r) => {
-    const k = age / life, x = 6 + k * (L - 10), y = spine(x) + r.range(-1, 1) * (half(x) + 4);
-    p.line(x - 4, y, x, y, k < 0.7 ? C[6] : C[5]);
-  });
-  // the source: a hot ball at the hand with four rays turning
-  const pulse = 0.5 + 0.5 * Math.sin(ph * TAU * 4);
-  p.circle(0, 0, W + 1.5 + pulse, (d) => (d < 0.55 ? WHITE : d < 0.85 ? C[6] : C[5]));
-  for (let i = 0; i < 4; i++) {
-    const a = ph * TAU + (i * TAU) / 4, rl = W + 5 + 2 * pulse;
-    p.line(Math.cos(a) * (W + 1), Math.sin(a) * (W + 1), Math.cos(a) * rl, Math.sin(a) * rl, i % 2 ? C[6] : C[5]);
+  const C = fit(o.palette, 8), ph = t / D, S = o.seed, EX = HX + L;
+  // the body, built across from a white core out to a dithered violet edge, wobbling and pulsing as it goes
+  const LV = [WHITE, C[6], C[5], C[4], C[3], C[2]];
+  for (let d = 0; d <= L; d += 0.5) {
+    const x = HX + d, w = W * (1 + 0.12 * Math.sin(d * 0.35 - ph * TAU * 8)) * Math.min(1, (d + 3) / 7);
+    const pulse = fract(d * 0.025 - ph * 4) < 0.07 ? 1 : 0;
+    for (let q0 = -w * 1.3; q0 <= w * 1.3; q0 += 0.5) {
+      const q = Math.abs(q0) / w, y = HY + q0;
+      let lv = q < 0.2 ? 0 : q < 0.4 ? 1 : q < 0.62 ? 2 : q < 0.85 ? 3 : q < 1 ? 4 : 5;
+      lv = Math.max(0, lv - pulse);
+      if (lv === 5 && bayer(x, y) > (1.3 - q) / 0.3) continue;
+      p.px(x, y, LV[lv]);
+    }
+    // three strands twisting round it: bright on the near side, gone behind
+    for (let s = 0; s < 3; s++) {
+      const a = d * 0.17 - ph * TAU * 6 + (s * TAU) / 3, off = Math.sin(a) * w * 1.05;
+      if (Math.cos(a) > -0.15) p.dot(x, HY + off, Math.cos(a) > 0.55 ? WHITE : C[6]);
+    }
+    if ((Math.round(d * 2) & 11) === 0) p.glow(x, HY, w * 2.2 + 4, C[5], 0.2);
   }
-  // the end: a splash that churns and throws sparks back
-  const ex = L, ey = spine(L);
-  // flattened against whatever it hits: taller than it is wide
-  p.ellipse(ex, ey, W * 0.7 + pulse, W * 1.5 + pulse * 1.5, (d) => (d < 0.4 ? WHITE : d < 0.75 ? C[6] : C[5]));
-  cycle(t, meta.duration, 8, S + 3, (r) => r.range(0.12, 0.24), (age, life, r) => {
-    const k = age / life, a = Math.PI + r.range(-1.3, 1.3), sp = r.range(50, 90);
-    const x = ex + Math.cos(a) * sp * age, y = ey + Math.sin(a) * sp * age + 60 * age * age;
-    sparkle(p, x, y, k < 0.4 ? 1 : 0, C[6], C[5], k < 0.5 ? WHITE : C[6]);
+
+  // the source: a flickering flare with spinning rays at the hand
+  const fr = 4.2 + Math.sin(ph * TAU * 10) * 0.6;
+  for (let i = 0; i < 4; i++) {
+    const a = ph * TAU * 2.5 + (i * TAU) / 4, l = 7 + 3 * Math.sin(ph * TAU * 6 + i);
+    p.line(HX, HY, HX + Math.cos(a) * l, HY + Math.sin(a) * l, (u) => (u < 0.5 ? WHITE : C[6]), (u) => (u < 0.6 ? 1 : 1.6 - u));
+  }
+  p.circle(HX, HY, fr + 1.5, C[4]);
+  p.circle(HX, HY, fr, C[6]);
+  p.circle(HX, HY, fr * 0.6, WHITE);
+  p.glow(HX, HY, 32, C[5], 0.8);
+  // energy drawn into the hand
+  cycle(t, D, 10, S * 3 + 1, 0.18, (age, life, r) => {
+    const a = r.range(0, TAU), dd = 16 * (1 - age / life) + 3, x = HX + Math.cos(a) * dd, y = HY + Math.sin(a) * dd;
+    p.dot(x, y, age / life > 0.6 ? WHITE : C[6]);
   });
-  p.glowLine(0, 0, L, ey, 10, C[4], 0.28);
-  p.glow(0, 0, 14, C[5], 0.35 + 0.15 * pulse);
-  p.glow(ex, ey, 12, C[5], 0.35 + 0.15 * pulse);
+
+  // the end: a hot flare spraying rays, rings shocking out, sparks thrown back and falling
+  const ir = 5 + Math.sin(ph * TAU * 12) * 0.8;
+  for (let i = 0; i < 7; i++) {
+    const a = Math.PI + (i - 3) * 0.36, l = 8 + 8 * Math.abs(loopNoise(ph, 4, S * 7 + i));
+    p.line(EX, HY, EX + Math.cos(a) * l, HY + Math.sin(a) * l, (u) => (u < 0.4 ? WHITE : i % 2 ? C[5] : C[6]), (u) => (u < 0.6 ? 1 : 1.6 - u));
+  }
+  for (let k = 0; k < 3; k++) {
+    const q = fract(ph * 3 + k / 3);
+    p.ring(EX, HY, 3 + 15 * ease.outCubic(q), Math.max(1, 2 * (1 - q)), q < 0.25 ? WHITE : C[5], 1.1 - q);
+  }
+  p.circle(EX, HY, ir + 1.5, C[4]);
+  p.circle(EX, HY, ir, C[6]);
+  p.circle(EX, HY, ir * 0.55, WHITE);
+  p.glow(EX, HY, 40, C[5], 0.9);
+  p.glow(EX, HY, 12, WHITE, 0.6);
+  // a fountain of sparks thrown up and back off the end, arcing down
+  cycle(t, D, 220, S * 3 + 2, (g) => g.range(0.18, 0.5), (age, life, r) => {
+    const a = Math.PI * 1.5 + r.range(-1.7, 0.45), sp = r.range(70, 260), vx = Math.cos(a) * sp, vy = Math.sin(a) * sp - 30;
+    const [x, y] = fly(EX, HY, vx, vy, age, 480, 2.2), [ux, uy] = flyV(vx, vy, age, 480, 2.2), k = 1 - age / life;
+    if (y > -1) return;
+    const head = k > 0.6 ? WHITE : k > 0.3 ? C[6] : C[5], sp2 = Math.hypot(ux, uy) || 1, len = Math.min(8, 1 + sp2 * 0.022);
+    p.line(x - (ux / sp2) * len, y - (uy / sp2) * len, x, y, (u) => (u > 0.5 ? head : C[4]));
+    p.glow(x, y, 3, head, 0.45 * k);
+  });
+  cycle(t, D, 6, S * 3 + 3, 0.3, (age, life, r) => {
+    const k = Math.sin((age / life) * Math.PI);
+    sparkle(p, EX + r.range(-12, 4), HY + r.range(-12, 12), 1 + 2.5 * k, C[6], C[5], 0.4 * k);
+  });
+  // violet vapour lifting off the end
+  cycle(t, D, 7, S * 3 + 5, (g) => g.range(0.8, 1.2), (age, life, r) => {
+    const q = age / life, x = EX + r.range(-8, 4) - q * 6, y = HY - 4 - q * r.range(14, 24), rad = r.range(3, 5) * (0.7 + 0.8 * q);
+    p.disc(x, y, rad, C[4], (dd) => 0.28 * Math.sin(q * Math.PI) * (1 - dd * dd));
+  });
+  // motes shed along the beam
+  cycle(t, D, 16, S * 3 + 4, (g) => g.range(0.3, 0.6), (age, life, r) => {
+    const q = age / life, x = HX + r.range(10, L - 10) + q * 20, y = HY + r.sign() * (W + 1 + q * r.range(4, 10));
+    mote(p, x, y, 40, (y - HY) * 1.5, r.chance(0.5) ? C[6] : C[5], 0.6, 1 - q, 0.3);
+  });
+  // the floor beneath catches the light
+  p.glow(EX, -1, 30, C[5], 0.25);
+  p.glow(HX + L / 2, -1, 60, C[4], 0.12);
 }

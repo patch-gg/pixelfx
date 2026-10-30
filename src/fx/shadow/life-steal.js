@@ -1,96 +1,135 @@
-import { burst, seg, ease, clamp, lerp, TAU, WHITE } from "../../core/index.js";
-import { steps, CRIMSON } from "./_lib.js";
+import { Particles, P, Rng, fit, sparkle, clamp, smooth, ease, TAU, WHITE, mix, luma } from "../../core/index.js";
+import { ringFast, Drops } from "./_lib.js";
 
 export const meta = {
   name: "Life steal",
-  desc: "A wound bursts open on a target to the right; blood-red orbs pop out, hang a beat, then whip back to the caster, who swells with each one.",
-  tags: ["shadow", "drain", "blood", "vampire", "heal", "directional", "one-shot"],
-  size: [88, 44],
-  origin: [16, 24],
-  duration: 1.5,
+  desc: "A target on the right is struck and bleeds red orbs; they hang a moment, then whip home as comet streaks and flood the caster crimson.",
+  tags: ["shadow", "life-steal", "drain", "blood", "heal", "directional", "magic", "one-shot"],
+  size: [184, 100],
+  origin: [36, 92],
+  duration: 2.2,
   loop: false,
   fps: 30,
-  bg: "dark",
-  options: { palette: CRIMSON, count: 6, distance: 58, seed: 8 },
+  bg: "ground",
+  actor: 2,
+  options: { palette: ["#14040a", "#3a0a14", "#6a101c", "#a01824", "#d42a30", "#ff5a50", "#ff9a8a", "#ffe6de"], dark: "#2a1040", seed: 11 },
 };
 
-// each orb's timeline: born, thrown out, hangs, flies home, lands
-function plan(S, i, n) {
-  const g = { born: 0, out: 0.16, hang: 0, fly: 0 };
-  burst(1, S * 31 + i, (r) => {
-    g.born = 0.04 + i * (0.36 / n) + r.range(0, 0.03);
-    g.hang = r.range(0.05, 0.12);
-    g.fly = r.range(0.3, 0.4);
-  });
-  g.land = g.born + g.out + g.hang + g.fly;
-  return g;
-}
+// the target point on the right, the caster's heart; when the orbs turn for home
+const TX = 104, TY = -24, HX = 1, HY = -20, N = 7;
 
-export function draw(p, t, o) {
-  const C = steps(o.palette), S = o.seed, TX = o.distance, n = o.count;
-
-  // the wound: spikes of red snap out of the target and pull back
-  const w = seg(t, 0, 0.2);
-  if (w > 0 && w < 1) {
-    const reach = 3 + 7 * Math.sin(Math.PI * Math.sqrt(w));
-    for (let k = 0; k < 6; k++) {
-      const a = (k / 6) * TAU + 0.3, r0 = 1.5 + 4 * w;
-      const x0 = TX + Math.cos(a) * r0, y0 = Math.sin(a) * r0, x1 = TX + Math.cos(a) * reach, y1 = Math.sin(a) * reach;
-      p.beam(x0, y0, x1, y1, 2.2 * (1 - w) + 1, C[5]);
-      p.line(x0, y0, x1, y1, w < 0.4 ? C[7] : C[6]);
-    }
-    if (w < 0.25) p.circle(TX, 0, 2.5, WHITE);
-    p.glow(TX, 0, 16, C[5], 0.5 * (1 - w));
+export function create(o) {
+  const C = fit(o.palette, 8), R = new Rng(o.seed), A = o.actor, floor = () => 0;
+  const ps = new Particles({ rng: R, ground: floor, sparks: [WHITE, C[7], C[6], C[5]] });
+  const drops = new Drops({ onLand: (x) => stains.push({ x, t0: t }) }), stains = [], lights = [];
+  const orbs = [];
+  for (let i = 0; i < N; i++) {
+    const a = -Math.PI / 2 + (i - (N - 1) / 2) * 0.4 + R.range(-0.12, 0.12), sp = R.range(100, 170);
+    orbs.push({ x: TX, y: TY, vx: Math.cos(a) * sp + 10, vy: Math.sin(a) * sp, home: 0.36 + i * 0.05 + R.range(0, 0.04), trail: [], done: false, at: 0, size: R.range(1.6, 2.4) });
   }
+  let t = 0, hit = false, flush = 0;
+  const light = (x, y, r, c, k, life) => lights.push({ x, y, r, c, k, life, max: life });
 
-  // orbs: thrown out of the wound, hang, then pulled home along a curve, faster and faster
-  let fed = 0, flash = 0;
-  burst(n, S, (r, i) => {
-    const g = plan(S, i, n), hx = TX + r.range(-6, 10), hy = (i % 2 ? -1 : 1) * r.range(5, 14), bend = r.range(-16, 16);
-    const pos = (tt) => {
-      const a = tt - g.born;
-      if (a < g.out) {
-        const e = ease.outCubic(clamp(a / g.out));
-        return [lerp(TX, hx, e), lerp(0, hy, e)];
+  return {
+    update(dt) {
+      t += dt;
+      if (!hit) {
+        hit = true;
+        light(TX, TY, 54, C[5], 1, 0.35);
+        light(TX, TY, 18, WHITE, 1, 0.08);
+        for (let i = 0; i < 14; i++) drops.add(TX + R.range(-3, 3), TY + R.range(-3, 3), R.range(-40, 90), R.range(-140, -20), R.chance(0.4) ? 2 : 1);
+        for (let i = 0; i < 12; i++) {
+          const a = R.range(0, TAU), sp = R.range(80, 170);
+          ps.spawn(P.SPARK, TX, TY, Math.cos(a) * sp, Math.sin(a) * sp, R.range(0.15, 0.35));
+        }
       }
-      const e = ease.inQuad(clamp((a - g.out - g.hang) / g.fly)), cx = hx / 2, cy = hy / 2 + bend;
-      return [(1 - e) * (1 - e) * hx + 2 * (1 - e) * e * cx, (1 - e) * (1 - e) * hy + 2 * (1 - e) * e * cy];
-    };
-    if (t >= g.land) {
-      fed += 1;
-      flash = Math.max(flash, 1 - seg(t, g.land, g.land + 0.12));
-      // sparks kicked out where it lands
-      burst(3, S + 50 + i, (q) => {
-        const a = t - g.land, life = q.range(0.15, 0.25);
-        if (a > life) return;
-        const ang = q.range(-2.2, 2.2) + Math.PI, sp = q.range(40, 70);
-        p.px(Math.cos(ang) * sp * a, Math.sin(ang) * sp * a, a / life < 0.5 ? C[7] : C[5]);
-      });
-      return;
-    }
-    if (t < g.born) return;
-    const [x, y] = pos(t), homing = t - g.born > g.out + g.hang;
-    // a tapered streak behind it on the way home
-    if (homing) {
-      let [ax, ay] = [x, y];
-      for (let j = 1; j <= 4; j++) {
-        const [bx, by] = pos(t - j * 0.025);
-        p.beam(ax, ay, bx, by, 4 - j * 0.75, j < 2 ? C[5] : j < 3 ? C[4] : C[3]);
-        [ax, ay] = [bx, by];
+      for (const b of orbs) {
+        if (b.done) continue;
+        if (t < b.home) {
+          // burst out, slowing to a hover
+          b.vx -= b.vx * 5 * dt;
+          b.vy -= b.vy * 5 * dt;
+        } else {
+          // whip home: steer hard at the caster's heart, faster and faster
+          const dx = HX - b.x, dy = HY - b.y, d = Math.hypot(dx, dy) || 1, pull = 2600 * Math.min(1, (t - b.home) * 3);
+          b.vx += (dx / d) * pull * dt;
+          b.vy += (dy / d) * pull * dt;
+          b.vx -= b.vx * 2.2 * dt;
+          b.vy -= b.vy * 2.2 * dt;
+          if (d < 6) {
+            b.done = true;
+            b.at = t;
+            flush = Math.min(1.5, flush + 0.45);
+            light(HX, HY, 30, C[5], 0.8, 0.25);
+            for (let i = 0; i < 6; i++) {
+              const a = R.range(0, TAU), sp = R.range(40, 100);
+              ps.spawn(P.SPARK, HX, HY, Math.cos(a) * sp, Math.sin(a) * sp - 20, R.range(0.12, 0.3));
+            }
+            for (let i = 0; i < 3; i++) ps.spawn(P.EMBER, HX + R.range(-8, 8), HY + R.range(-6, 14), R.range(-10, 10), -R.range(15, 35), R.range(0.6, 1.1), C[6]);
+          }
+        }
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.trail.unshift([b.x, b.y]);
+        if (b.trail.length > 26) b.trail.pop();
       }
-    }
-    const s = t - g.born < 0.05 ? 1.2 : 2.3;
-    p.circle(x, y, s, (d) => (d < 0.35 ? C[7] : d < 0.75 ? C[6] : C[4]));
-    p.px(x - 1, y - 1, WHITE);
-    p.light(x, y, C[5], 0.5);
-    p.glow(x, y, 7, C[5], 0.25);
-  });
-
-  // the caster swells with each orb that lands, holds, then the stolen life sinks in
-  const done = plan(S, n - 1, n).land, sink = ease.inCubic(seg(t, done + 0.12, 1.45));
-  if (fed > 0 && sink < 1) {
-    const R = (2 + Math.min(fed, 4) * 0.9 + flash * 1.5) * (1 - sink);
-    p.circle(0, 0, R, (d) => (flash > 0.5 || d < 0.4 ? C[7] : d < 0.78 ? C[6] : C[4]));
-    p.glow(0, 0, 14 + fed * 2, C[5], (0.3 + flash * 0.3) * (1 - sink));
-  }
+      flush -= flush * 2.6 * dt;
+      for (let i = lights.length - 1; i >= 0; i--) if ((lights[i].life -= dt) <= 0) lights.splice(i, 1);
+      for (let i = stains.length - 1; i >= 0; i--) if (t - stains[i].t0 > 0.8) stains.splice(i, 1);
+      drops.update(dt);
+      ps.update(dt);
+    },
+    drawBack(p) {
+      // the wound: a dark red bloom where the target was struck, thinning away
+      const k = 1 - smooth(0.1, 0.9, t);
+      if (k > 0) {
+        p.disc(TX, TY, 6 + t * 10, C[2], 0.5 * k);
+        p.glow(TX, TY, 30, C[4], 0.35 * k);
+      }
+      for (const s of stains) p.dot(s.x, -0.5, C[3], 1 - (t - s.t0) / 0.8);
+    },
+    draw(p) {
+      // the caster flushes crimson as the orbs land: its own colours pushed toward blood-red, a hot outline
+      const fk = Math.min(1, flush) * (1 - smooth(1.5, 2.05, t));
+      if (A && fk > 0.03) {
+        for (let my = 0; my < A.h; my++)
+          for (let mx = 0; mx < A.w; mx++) {
+            const c0 = A.pixels[my * A.w + mx];
+            if (!c0) continue;
+            const l = luma(c0);
+            p.blend(A.x + mx, A.y + my, l > 0.6 ? C[6] : l > 0.4 ? C[5] : l > 0.2 ? C[4] : C[3], 0.45 * fk);
+          }
+        if (fk > 0.12) p.outline(A.mask, A.x, A.y, fk > 0.6 ? C[6] : fk > 0.3 ? C[5] : C[3]);
+        p.glow(HX, HY, 28, C[5], 0.45 * fk);
+      }
+      // the hit on the target
+      if (t < 0.12) sparkle(p, TX, TY, 10 * (1 - t / 0.12), C[7], C[5], 0.6);
+      const ru = t / 0.28;
+      if (ru < 1) ringFast(p, TX, TY, 4 + 16 * ease.outCubic(ru), Math.max(1, 2 * (1 - ru)), ru < 0.4 ? C[7] : C[5]);
+      drops.draw(p, C[3], C[6]);
+      // the orbs: comet tails tapering from a hot head through blood-red to a dark wine thread
+      for (const b of orbs) {
+        if (b.done && t - b.at > 0.2) continue;
+        // the tail is swallowed after the head: it shortens rather than fades
+        const n = b.done ? Math.floor(b.trail.length * (1 - (t - b.at) / 0.2)) : b.trail.length;
+        for (let i = n - 1; i >= 1; i--) {
+          const u = i / 25, [x0, y0] = b.trail[i - 1], [x1, y1] = b.trail[i];
+          p.line(x1, y1, x0, y0, u < 0.15 ? C[7] : u < 0.35 ? C[6] : u < 0.6 ? C[5] : u < 0.8 ? C[4] : C[2]);
+          if (i < 7) p.disc(x1, y1, (b.size + 0.4) * (1 - i / 7), u < 0.12 ? C[6] : C[5], 0.8);
+          if (i % 6 === 3) p.glow(x1, y1, 6, C[5], 0.2 * (1 - u));
+        }
+        if (b.done) continue;
+        const pulse = t < b.home ? 0.8 + 0.2 * Math.sin(t * 30 + b.size * 9) : 1;
+        p.circle(b.x, b.y, b.size + 0.9, C[4]);
+        p.circle(b.x, b.y, b.size * pulse, C[6]);
+        p.px(b.x - 0.5, b.y - 0.5, WHITE);
+        p.glow(b.x, b.y, 9, C[5], 0.5);
+      }
+      ps.draw(p);
+      for (const l of lights) {
+        const q = l.life / l.max;
+        p.glow(l.x, l.y, l.r * (0.6 + 0.4 * q), l.c, l.k * q * q);
+      }
+    },
+  };
 }

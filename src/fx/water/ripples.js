@@ -1,45 +1,100 @@
-import { PAL, fract, ease, seg, rng } from "../../core/index.js";
-import { fit, oval, ripple } from "./_lib.js";
+import { fit, cycle, clamp, smooth, ease, TAU, WHITE } from "../../core/index.js";
+import { WATER, ring } from "./_lib.js";
 
 export const meta = {
   name: "Ripples",
-  desc: "Rings spread over still water from a bobbing point: bright crests over dark troughs, slowing and breaking into dashes as they fade.",
-  tags: ["water", "ripple", "surface", "pond", "ambient", "loop"],
-  size: [80, 24],
-  origin: [40, 12],
+  desc: "A drop plinks on still dark water and rings spread out across it at a low angle: the swell of each ring catches the light, crests glint, and they fade into the calm.",
+  tags: ["water", "ripples", "rings", "surface", "pond", "ambient", "loop"],
+  size: [136, 52],
+  origin: [68, 30],
   duration: 2,
   loop: true,
   fps: 30,
   bg: "ground",
-  options: { palette: PAL.water, count: 3, radius: 36, squash: 0.28, seed: 1 },
+  options: { palette: WATER, seed: 2 },
 };
 
-export function draw(p, t, o) {
-  const W = fit(o.palette), S = o.seed, ph = t / meta.duration, R = o.radius, q = o.squash, n = o.count;
-  for (let i = 0; i < n; i++) {
-    const k = fract(ph + i / n); // this ring's age 0..1: the newest is born as the oldest dies
-    const r = 1.5 + (R - 1.5) * ease.outQuad(k), keep = 1 - seg(k, 0.25, 1);
-    // the trough: a dark arc just inside the crest on the near side, gone before the crest
-    if (r > 5 && k < 0.6) oval(p, 0, 0.7, r - 2.5, (r - 2.5) * q, W[2], (a) => (Math.sin(a) > 0.35 ? 1 : 0));
-    ripple(p, 0, 0, r, r * q, k < 0.2 ? W[7] : W[6], k < 0.2 ? W[6] : W[5], keep * 1.25, S * 13 + i);
+const D = meta.duration, SY = 0.26, EVERY = 0.5, LIFE = 2, RMAX = 60, PATCH = 64;
+
+// one ring at age a: its radius (fast out, slowing) and strength
+const radius = (a) => 2 + (RMAX - 2) * ease.outCubic(a / LIFE);
+const power = (a) => Math.pow(1 - a / LIFE, 1.5) * Math.min(1, a / 0.08);
+
+// the rings alive at t, newest first: [age, index]
+function alive(t) {
+  const out = [];
+  for (let k = 0; k * EVERY < LIFE; k++) {
+    const a = (((t - k * EVERY) % D) + D) % D;
+    if (a < LIFE) out.push([a, Math.round((((t - a) % D) + D) % D / EVERY)]);
   }
-  // flecks of foam floating on the surface, lifted a pixel as each crest passes under them
-  for (let i = 0; i < 5; i++) {
-    const r = rng(S, i), ang = r.range(0, Math.PI * 2), rho = r.range(8, R - 4), x = Math.cos(ang) * rho, y = Math.sin(ang) * rho * q;
-    let lift = 0;
-    for (let j = 0; j < n; j++) {
-      const k = fract(ph + j / n), rr = 1.5 + (R - 1.5) * ease.outQuad(k);
-      if (Math.abs(rr - rho) < 1.6) lift = 1;
+  return out;
+}
+
+// the water: dark and see-through, shading with the slope of the swell each ring carries, so the rings read as
+// waves catching the light from the far left, not just lines
+function surface(p, C, t) {
+  const rs = alive(t).map(([a]) => [radius(a), power(a), 3 + a * 2.2]);
+  for (let Y = Math.floor(-PATCH * SY); Y < PATCH * SY; Y++)
+    for (let X = -PATCH; X < PATCH; X++) {
+      const x = X + 0.5, y = Y + 0.5, z = y / SY, r = Math.hypot(x, z), e = r / PATCH;
+      if (e > 1) continue;
+      const edge = 1 - smooth(0.6, 1, e);
+      p.blend(x, y, C[1], 0.55 * edge);
+      let slope = 0;
+      for (const [R, k, w] of rs) {
+        const d = r - R;
+        if (d > 2.2 * w || d < -2.2 * w) continue;
+        slope += k * Math.exp(-((d / w) ** 2)) * -Math.sin(d * 1.15) * 1.15;
+      }
+      if (slope === 0) continue;
+      // the side of a swell facing the light (back and left) catches it; the side away from it goes dark
+      const face = slope * (-(x * -0.55 + z * -0.84) / Math.max(1, r));
+      if (face > 0.18) p.blend(x, y, face > 0.6 ? C[5] : C[4], Math.min(0.9, (face - 0.18) * 2.2) * edge);
+      else if (face < -0.25) p.blend(x, y, C[0], Math.min(0.8, (-face - 0.25) * 2) * edge);
     }
-    p.px(x, y - lift, lift ? W[7] : W[5]);
-    if (r.next() < 0.5) p.px(x + 1, y - lift, W[4]);
+}
+
+function rings(p, C, t, half) {
+  for (const [a, i] of alive(t)) {
+    const R = radius(a), k = power(a);
+    ring(p, 0, 0, R, SY, 0.85 * k, C, { n: 2, gap: 3 + a * 1.4, half, hot: a < 0.14, glint: half > 0 && a > 0.1 ? k : 0, seed: i + 1, wob: 0.4 + a * 1.1 });
   }
-  // the source: each time a ring is born the point dips and kicks up a bead of water
-  const beat = fract(ph * n) * (meta.duration / n), hop = beat < 0.3 ? Math.sin((beat / 0.3) * Math.PI) : 0;
-  oval(p, 0, 0, 2.5 - hop, 0.8, W[6]);
-  if (hop > 0.05) {
-    p.px(0, -1 - Math.round(hop * 4), W[7]);
-    if (hop > 0.5) p.px(0, -Math.round(hop * 4), W[5]);
+}
+
+export function drawBack(p, t, o) {
+  const C = fit(o.palette, 8);
+  surface(p, C, t);
+  rings(p, C, t, -1);
+}
+
+export function draw(p, t, o) {
+  const C = fit(o.palette, 8), S = o.seed;
+  rings(p, C, t, 1);
+  // each ring starts with a drop: a white fleck, a bead thrown up and back down, a little light
+  for (const [a] of alive(t)) {
+    if (a < 0.08) {
+      p.px(0, 0, WHITE);
+      p.px(-1, 0, C[6]);
+      p.px(1, 0, C[6]);
+      p.glow(0, 0, 8, C[5], 0.5 * (1 - a / 0.08));
+    }
+    const b = a - 0.04, h = 90 * b - 0.5 * 700 * b * b;
+    if (b > 0 && h > 0) {
+      p.px(0, -h, WHITE);
+      p.px(0, -h + 1, C[5]);
+    }
   }
-  p.glow(0, 0, 10, W[5], 0.1 + 0.1 * hop);
+  // glints ride the near crests, winking
+  cycle(t, D, 10, S + 5, (g) => g.range(0.25, 0.45), (age, life, r) => {
+    const all = alive(t), [a] = all[Math.floor(r.next() * all.length)] ?? [0];
+    const ang = r.range(0.3, Math.PI - 0.3), R = radius(a), k = Math.sin((Math.PI * age) / life) * power(a);
+    if (k < 0.15 || R < 6) return;
+    const x = Math.cos(ang) * R, y = Math.sin(ang) * R * SY;
+    p.px(x, y, WHITE);
+    if (k > 0.5) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) p.px(x + dx, y + dy, C[6]);
+    p.glow(x, y, 5, C[5], 0.4 * k);
+  });
+  // a cool light on the water, brightest where the rings start
+  p.glow(0, 0, 40, C[4], 0.14);
+  p.glow(0, 0, 14, C[5], 0.12);
 }

@@ -1,68 +1,126 @@
-import { cycle, fract, TAU } from "../../core/index.js";
-import { Grid, shades, lit, shift } from "./_lib.js";
+import { fit, clamp, wrap, lerp, rng, cycle, TAU } from "../../core/index.js";
+import { Grid, shift, shadow } from "./_lib.js";
 
 export const meta = {
   name: "Ghost",
-  desc: "A little sheet ghost bobs in the air, its scalloped hem rippling, nub arms waving, an O mouth and a slow blink; a cold glow around it.",
-  tags: ["critter", "ghost", "spooky", "undead", "float", "loop"],
-  size: [36, 44],
-  origin: [18, 22],
-  duration: 2,
+  desc: "A sheet ghost bobs over the floor: its scalloped hem ripples and trails its drift, little arms flutter, it glances about and blinks, motes trickle off its hem.",
+  tags: ["critter", "ghost", "spirit", "undead", "spooky", "float", "loop"],
+  size: [96, 100],
+  origin: [48, 90],
+  duration: 2.4,
   loop: true,
   fps: 30,
-  bg: "dark",
-  options: { palette: ["#1e1838", "#5a5490", "#a6a8d8", "#dfe4fa", "#ffffff"], seed: 1 },
+  bg: "ground",
+  options: { palette: ["#10142a", "#232c52", "#3e4f86", "#6b84bb", "#a3b8e2", "#d8e4ff", "#ffffff"], hover: 14, seed: 1 },
 };
 
-export function draw(p, time, o) {
-  const t = shift(time, meta.duration, o.seed);
-  const S = shades(o.palette, 5), ph = t / meta.duration;
-  const bob = Math.sin(ph * TAU) * 2.5, lean = Math.cos(ph * TAU) * 0.08;
-  const hy = -7 + bob, R = 8.5, base = 7 + bob;
-  const g = new Grid(-18, -22, 36, 44);
-  // the sheet: a dome over a body that flares a touch, the hem in rounded lobes that roll sideways
-  g.shade(-12, hy - R - 1, 12, base + 4, (x, y) => {
-    const xs = x - (y - hy) * lean;
-    let nx, ny;
-    if (y < hy) {
-      nx = xs / R;
-      ny = (y - hy) / R;
-      if (nx * nx + ny * ny > 1) return 0;
-    } else {
-      const w = R + (y - hy) * 0.14;
-      nx = xs / w;
-      ny = 0;
-      if (Math.abs(nx) > 1) return 0;
-      const lobe = fract((xs + 10) / 6.4 + ph * 2), hem = base + 3 * Math.sqrt(Math.max(0, 1 - (2 * lobe - 1) ** 2));
-      if (y > hem) return 0;
-      if (y > hem - 1.5) return S[2];
+const D = meta.duration, GRID = new Grid(-20, -40, 40, 46), R = 10.5;
+
+// where the ghost is: a lazy drift side to side and a bob, both looping
+function at(t, hover) {
+  const a = (t / D) * TAU;
+  return { x: 4 * Math.sin(a), y: -hover - 3 * Math.sin(2 * a + 0.8) };
+}
+
+// the sheet's half-width v px above the hem (0 hem .. 1 crown): a dome over a body that flares toward the hem
+function halfW(h) {
+  const top = 2 * R + 9;
+  if (h > top || h < -1) return -1;
+  if (h > top - R) return Math.sqrt(Math.max(0, R * R - (h - (top - R)) ** 2));
+  return lerp(R + 2.2, R, (h / (top - R)) ** 0.7);
+}
+
+function sheet(g, C, t, o, lagX) {
+  g.clear();
+  const top = 2 * R + 9, ph = (t / D) * TAU * 2, NL = 4, HW = R + 2.2, LW = (2 * HW) / NL;
+  // the lower sheet trails behind the head as it drifts
+  const off = (h) => lagX * (1 - clamp(h / top)) ** 1.4;
+  // four rounded lobes along the hem, lifting one after another in a ripple
+  const lobe = (X) => {
+    const j = clamp(Math.floor((X + HW) / LW), 0, NL - 1), c = -HW + (j + 0.5) * LW, u = (X - c) / (LW / 2);
+    return { j, u, d: (2.2 + 1.1 * Math.sin(ph - j * 1.5)) * Math.sqrt(Math.max(0, 1 - u * u)) };
+  };
+  const inside = (x, y) => {
+    const h = -y, X = x - off(h);
+    if (h < 0 && -h > lobe(X).d) return false;
+    const hw = halfW(Math.max(0, h));
+    return hw >= 0 && Math.abs(X) <= hw;
+  };
+  // little arms: rounded nubs that flutter
+  const arm = (x, y) => {
+    for (const s of [-1, 1]) {
+      const ax = s * (R + 1.2) + off(13), ay = -13 + 1.6 * Math.sin(ph + s * 1.3);
+      if (((x - ax) / 3) ** 2 + ((y - ay) / 2.2) ** 2 <= 1) return true;
     }
-    const L = lit(nx, ny * 0.8 - 0.1);
-    if (L > 0.86 && y < hy - 2) return S[4];
-    if (L > 0.45) return S[3];
-    if (L > 0.2) return S[2];
-    return S[1];
+    return false;
+  };
+  const any = (x, y) => inside(x, y) || arm(x, y);
+  const lx = -9, ly = -top - 1;
+  const lit = (x, y, k) => any(lx + (x - lx) / k, ly + (y - ly) / k);
+  g.shade(-19, -top - 2, 19, 5, (x, y, o2) => {
+    if (!any(x, y)) return 0;
+    const h = -y, X = x - off(h);
+    let i = lit(x, y, 0.62) ? 5 : 4;
+    if (!any(x + 2.4, y + 1.8)) i = 3;
+    if (!any(x + 1.2, y + 1) && X > 2) i = 2;
+    // the gloss: a thin bright arc just inside the top-left of the dome
+    if (h > top - R - 2 && X < 1 && !any(x - 1.5, y - 1.5) && any(x - 0.6, y - 0.6)) i = 6;
+    // the hem: each lobe darker underneath and to its right, a crease where two lobes meet
+    if (h < 1) {
+      const L = lobe(X);
+      if (L.u > 0.1 || -h > L.d - 1.2) i = Math.min(i, 3);
+    }
+    // folds: short creases running down into the notches between the lobes, lit on their left
+    if (h < 7 && h >= -0.5) {
+      for (let j = 1; j < NL; j++) {
+        const cx = -HW + j * LW + 0.6 * Math.sin(ph - j), w = (7 - h) * 0.09;
+        if (Math.abs(X - cx) <= w + 0.3) i = Math.min(i, 3);
+        else if (cx - X > w + 0.3 && cx - X < w + 1.3 && i === 4) i = 5;
+      }
+    }
+    o2.a = h < 2 ? 0.86 : 0.95;
+    return C[i];
   });
-  // nub arms, waving out of step
-  for (const side of [-1, 1]) {
-    const wave = Math.sin(ph * TAU * 2 + (side > 0 ? 1.4 : 0));
-    g.ellipse(side * (R + 1.2), hy + 7 + wave * (side > 0 ? 1.5 : 0.8), 2.4, 1.6, (nx, ny) => (ny < 0 && side < 0 ? S[3] : S[2]));
+  return { inside, off, top };
+}
+
+export function draw(p, time, o) {
+  const t = shift(time, D, o.seed), C = fit(o.palette, 7), S = at(t, o.hover), lagX = at(t - 0.3, o.hover).x - S.x;
+  const g = GRID;
+  const sh = sheet(g, C, t, o, lagX), top = sh.top;
+  // the face: two eyes that glance about and blink, a little mouth that oohs
+  const look = wrap(t, D) < 0.7 ? 0 : wrap(t, D) < 1.3 ? 1 : wrap(t, D) < 1.9 ? -1 : 0, blink = wrap(t, D) > 1.95 && wrap(t, D) < 2.03;
+  const ey = -top + R - 1, mo = 0.5 + 0.5 * Math.sin((t / D) * TAU * 2);
+  for (const s of [-1, 1]) {
+    const ex = s * 4 - (s > 0 ? 1 : 0) + look;
+    if (blink) g.set(ex, ey + 2, C[1]), g.set(ex + 1, ey + 2, C[1]);
+    else {
+      for (let k = 0; k < 4; k++) g.set(ex, ey + k, C[0]), g.set(ex + 1, ey + k, C[0]);
+      g.set(ex + (look < 0 ? 0 : 1), ey, C[2]);
+    }
   }
-  // face: tall eyes, an O mouth, a blink once a loop
-  const blink = ph > 0.62 && ph < 0.67;
-  for (const ex of [-3, 2]) {
-    const x = Math.round(ex + 0.4 * lean * 10), y = Math.round(hy - 1);
-    if (blink) g.set(x, y + 1, S[0]), g.set(x + 1, y + 1, S[0]);
-    else for (let k = -1; k <= 1; k++) g.set(x, y + k, S[0]), g.set(x + 1, y + k, S[0]);
-  }
-  const my = Math.round(hy + 4);
-  g.set(-1, my, S[0]), g.set(0, my, S[0]), g.set(-1, my + 1, S[1]), g.set(0, my + 1, S[0]);
-  g.outline(S[0]);
-  // a few cold motes trickle off the hem and fade (drawn first, so the sheet hides them)
-  cycle(t, meta.duration, 6, o.seed, 1.2, (age, life, r) => {
-    const k = age / life, x = r.range(-8, 8) + Math.sin(age * 3 + r.next() * 6) * 1.5, y = base + 1 + age * r.range(5, 9);
-    p.dot(x, y, k < 0.4 ? S[4] : S[2], 1 - k);
+  const my = ey + 6;
+  g.set(look - 1, my, C[1]); g.set(look, my, C[1]);
+  if (mo > 0.4) g.set(look - 1, my + 1, C[0]), g.set(look, my + 1, C[0]);
+  g.outline((x, y, nx, ny) => (ny > 0 ? C[2] : C[1]), 0.95);
+  g.draw(p, 1, S.x, S.y);
+  // motes trickle off the hem and fade as they sink and drift
+  cycle(t, D, 12, o.seed * 3 + 1, (r) => r.range(1, 1.7), (age, L, r, i) => {
+    const S0 = at(wrap(t - age, D), o.hover), k = age / L, x0 = S0.x + r.range(-10, 10), y0 = S0.y + 1.5;
+    const x = x0 + Math.sin(age * 2.2 + i) * 2.4, y = y0 + r.range(5, 11) * age - 3 * age * age;
+    const a = Math.min(1, k * 6) * Math.min(1, (1 - k) * 2.2), tw = 0.6 + 0.4 * Math.sin(age * 8 + i * 1.7);
+    p.dot(x, y, tw > 0.8 ? C[6] : C[5], a);
+    if (r.chance(0.3)) p.dot(x, y - 1, C[4], a * 0.7);
+    p.glow(x, y, 7, C[4], 0.42 * a * tw);
   });
-  g.draw(p);
-  p.glow(0, hy + 4, 22, S[2], 0.16);
+  // a cold glow round it
+  p.glow(S.x, S.y - top * 0.55, 54, C[3], 0.3);
+  p.glow(S.x - 3, S.y - top * 0.72, 14, C[5], 0.12);
+}
+
+export function drawBack(p, time, o) {
+  const t = shift(time, D, o.seed), C = fit(o.palette, 7), S = at(t, o.hover), hgt = clamp((-S.y - 8) / 16);
+  // its shadow on the floor, and the floor lit cold under it
+  shadow(p, S.x, 0, 11 - 3 * hgt, 1.6, C[0], 0.55 - 0.2 * hgt);
+  for (let x = -24; x <= 24; x += 6) p.glow(S.x + x, -1, 16, C[4], 0.14 * (1 - Math.abs(x) / 34) * (1 - 0.4 * hgt));
 }

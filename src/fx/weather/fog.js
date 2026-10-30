@@ -1,52 +1,101 @@
-import { ramp, clamp, tileFbm, TAU } from "../../core/index.js";
-import { box, clip } from "./_lib.js";
+// The banded fog (a baked tiling noise, warped, cut into a few translucent tones with Bayer edges, a lit crest
+// wherever a band's top meets thinner fog) is adapted from Sprite Fusion's open-source fog
+// (https://www.spritefusion.com/pixel-art-vfx/fog), MIT License, Copyright (c) 2026 Hugo Duprez.
+import { fit, clamp, smooth, mix, TAU, WHITE } from "../../core/index.js";
+import { rows, field, sample, bayer } from "./_lib.js";
 
 export const meta = {
   name: "Fog",
-  desc: "Banks of fog roll slowly across in three layers, the far ones slower and darker, a thick pale mist hugging the floor.",
-  tags: ["weather", "fog", "mist", "haze", "ambient", "loop"],
-  size: [128, 72],
-  origin: [64, 64],
+  desc: "Slow banks of moonlit fog at three depths drift past each other, crests catching the light, while thin streaks of mist slide by in front.",
+  tags: ["weather", "fog", "mist", "haze", "night", "ambient", "loop"],
+  size: [320, 180],
+  origin: [160, 170],
   duration: 12,
   loop: true,
-  fps: 15,
-  bg: "ground",
-  options: { palette: ["#2a3040", "#465064", "#6c7890", "#9ca8bc", "#d0d8e4"], seed: 89 },
+  fps: 30,
+  bg: "sky",
+  options: {
+    palette: ["#14121e", "#24213a", "#363250", "#4f4a6c", "#6d688b", "#918cab", "#bdb8d4", "#ece8f6"],
+    seed: 5,
+  },
 };
 
-// fog is translucent, so it lives in the light buffer, thickening in flat posterized steps (never a smear,
-// never a dither pattern); each bank's thickest core takes a paler step
-const level = (d) => (d > 0.62 ? 3 : d > 0.38 ? 2 : d > 0.16 ? 1 : 0);
-const HAZE = [0, 0.08, 0.15, 0.23];
+const D = 12, W = 320;
+const T = [0.3, 0.5, 0.7], BW = 0.06;
+// far to near: where each bank's top thins out (top..base), how far down it reaches, noise scale (the tile it
+// scrolls each loop is 256 / sx px wide), tiles a loop, how opaque, tones [thin, body, dense], crest tone
+const BANKS = [
+  { top: -84, base: -40, bot: -20, sx: 1.6, sy: 2.2, lap: 1, alpha: 0.24, tone: [2, 3, 4], crest: 5, warp: 16, crestFrom: 3 },
+  { top: -62, base: -24, bot: -2, sx: 1.0667, sy: 2.5, lap: 1, alpha: 0.3, tone: [2, 3, 4], crest: 5, warp: 22, crestFrom: 2 },
+  { top: -42, base: -8, bot: 10, sx: 0.8, sy: 2.8, lap: 1, alpha: 0.36, tone: [2, 3, 5], crest: 6, warp: 28, crestFrom: 1 },
+];
+const BR = new Float32Array(W);
+const P1 = BANKS.map(() => new Float32Array(W)), P2 = BANKS.map(() => new Float32Array(W)), WARP = new Float32Array(W);
+
+export function drawBack(p, t, o) {
+  const S = o.seed, C = fit(o.palette, 8);
+  bank(p, t, S, C, 0);
+  bank(p, t, S, C, 1);
+}
 
 export function draw(p, t, o) {
-  p = clip(p, meta);
-  const C = ramp(o.palette), S = o.seed, B = box(meta), ph = t / meta.duration;
-  // [center height, half thickness, laps a loop, color step, seed]: back to front
-  const banks = [
-    [-34, 13, 1, 1, 0],
-    [-18, 11, 2, 2, 1],
-    [-3, 8, 3, 3, 2],
-  ];
-  for (const [cy, hw, laps, ci, k] of banks) {
-    // the band's wave depends only on the column: once per column
-    const wave = [];
-    for (let cx = B.x0; cx <= B.x1; cx++) wave.push(Math.sin(((cx + 0.5 - B.x0) / B.w) * TAU * 2 - ph * TAU * laps + k) * 3);
-    const reach = hw * 1.3 + 3;
-    p.shade(B.x0, Math.max(B.y0, cy - reach), B.x1, Math.min(B.y1, cy + reach), (x, y, out) => {
-      const u = (x - B.x0) / B.w, edge = 1 - Math.abs(y - cy - wave[Math.floor(x) - B.x0]) / hw;
-      if (edge < -0.25) return;
-      // a wavy band; its edges tear into wisps that scroll by a whole width a lap
-      const n = tileFbm(u * 5 - ph * 5 * laps, (y - cy) * 0.09 + k * 7.3, 5, 0, S + k, 2);
-      const lv = level(edge * 0.75 + n * 0.55);
-      if (!lv) return;
-      out.l = C[ci + (lv === 3 ? 1 : 0)];
-      out.k = HAZE[lv] * (0.85 + ci * 0.15);
-      // in the thick of it, streaks of mist drawn as long horizontal dashes that ride along with the bank
-      if (lv === 3 && Math.round(y - cy) % 4 === 0) {
-        const dash = tileFbm(u * 20 - ph * 20 * laps, y * 0.5 + k * 3.1, 20, 0, S + 9 + k, 1);
-        if (dash > 0.12) return C[ci + 1];
+  const S = o.seed, C = fit(o.palette, 8);
+  bank(p, t, S, C, 2);
+  streaks(p, t, S, C, 1);
+}
+
+function bank(p, t, S, C, n) {
+  const B = BANKS[n], F = field(S * 7 + n, 256, 128), G = field(S * 7 + 11, 256, 128, [4, 8, 16]);
+  const drift = (256 * B.lap * t) / D, boil = (128 * t) / D, prev1 = P1[n], prev2 = P2[n];
+  const tones = B.tone.map((i) => C[i]), crest = mix(C[B.crest], WHITE, 0.12 + 0.08 * n);
+  prev1.fill(0);
+  prev2.fill(0);
+  // the fog breathes: its top rises and falls a little along its length
+  for (let i = 0; i < W; i++) BR[i] = 2 * Math.sin((TAU * t) / D + (i - 160) * 0.006 + n * 1.7);
+  rows(p, meta, B.top - 2, B.bot, (y, R) => {
+    const prof = smooth(B.top, B.base, y) * (1 - smooth(B.bot - (B.bot < 10 ? 14 : 4), B.bot + 1, y));
+    for (let i = 0; i < W; i += 2) WARP[i] = WARP[i + 1] = sample(G, i * 0.35 + n * 70, y * 0.5 + boil) - 0.5;
+    for (let i = 0; i < W; i++) {
+      const x = i - 160 + 0.5, w = WARP[i];
+      // the noise is pushed hard and clamped so it, not the height, shapes the fog: blobs, not stripes
+      const nn = clamp((sample(F, x * B.sx + drift + w * B.warp, (y + BR[i]) * B.sy + w * 8) - 0.5) * 2.6 + 0.5) - 0.5;
+      const f = prof <= 0.01 ? 0 : (prof * 0.72 + nn * 0.95) * (0.6 + 0.5 * prof);
+      const above = prev2[i];
+      prev2[i] = prev1[i];
+      prev1[i] = f;
+      if (f <= T[0]) continue;
+      const th = bayer(i, y) * BW, band = f > T[2] + th ? 2 : f > T[1] + th ? 1 : 0, solid = f > T[2] ? 2 : f > T[1] ? 1 : 0;
+      // a lit crest, one pixel thick, where this band's top meets thinner fog
+      if (solid >= B.crestFrom && above < T[solid]) {
+        R.c[i] = crest;
+        R.a[i] = B.alpha * 0.95;
+        R.l[i] = C[6];
+        R.k[i] = 0.07;
+      } else {
+        // dense fog scatters the most moonlight: it's the brightest part, with a little glow
+        R.c[i] = tones[band];
+        R.a[i] = B.alpha * (0.55 + 0.25 * band);
+        if (band === 2) (R.l[i] = C[5]), (R.k[i] = 0.03 + 0.02 * n);
       }
-    });
-  }
+      R.b[i] = 1;
+    }
+  });
+}
+
+// thin streaks of mist sliding by faster than the banks, a few behind the near bank and a few in front
+function streaks(p, t, S, C, front) {
+  // one tile a loop: the back streaks slide at 43 px/s, the front ones at 53
+  const F = field(S * 7 + 20 + front, 256, 128), drift = (256 * t) / D, sx = front ? 0.4 : 0.5, y0 = front ? -40 : -96, y1 = front ? 6 : -30;
+  rows(p, meta, y0, y1, (y, R) => {
+    const env = smooth(y0, y0 + 10, y) * (1 - smooth(y1 - 10, y1, y));
+    for (let i = 0; i < W; i++) {
+      const x = i - 160 + 0.5, s = (sample(F, x * sx + drift, y * 6.5 + 30) - 0.64) * 3 * env;
+      if (s <= 0.05) continue;
+      R.c[i] = s > 0.35 ? C[5] : C[4];
+      R.a[i] = Math.min(0.4, s);
+      R.b[i] = 1;
+      R.l[i] = C[5];
+      R.k[i] = s * 0.05;
+    }
+  });
 }

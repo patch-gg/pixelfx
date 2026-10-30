@@ -10,6 +10,8 @@ const FX = Object.entries(effects).map(([id, mod]) => {
   return { id, cat: id.split("/")[0], name: meta.name, mod: { ...mod, meta }, meta };
 });
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+// full-screen effects (transitions, weather, impact frames) fill a 16:9 stage edge to edge instead of floating in it
+const isScreen = (fx) => fx.meta.size[0] >= 320 && Math.abs(fx.meta.size[0] / fx.meta.size[1] - 16 / 9) < 0.05;
 const $ = (s) => document.querySelector(s);
 function el(tag, props = {}, kids = []) {
   const e = Object.assign(document.createElement(tag), props);
@@ -33,6 +35,9 @@ class Player {
     this.y = Math.floor((this.H - h) / 2) + oy;
     this.canvas.width = this.W;
     this.canvas.height = this.H;
+    // shrinking pixel art nearest-neighbour drops whole 1 px lines; smooth it only when it has to shrink
+    const shown = this.canvas.getBoundingClientRect().width * devicePixelRatio;
+    this.canvas.style.imageRendering = shown && shown < this.W ? "auto" : "";
     this.frame = createFrame(this.W, this.H);
     this.img = this.ctx.createImageData(this.W, this.H);
     this.setBg(this.bg);
@@ -94,7 +99,8 @@ function build() {
     sections.push({ c, sec, list });
     for (const fx of list) {
       const cv = el("canvas", { ariaLabel: fx.name });
-      const fig = el("figure", { className: "tile", tabIndex: 0 }, [
+      const [fw, fh] = fx.meta.size;
+      const fig = el("figure", { className: isScreen(fx) ? "tile big screen" : fw > 200 || fh > 170 ? "tile big" : "tile", tabIndex: 0 }, [
         el("div", { className: "stage" }, cv),
         el("figcaption", {}, [el("b", { textContent: fx.name }), el("small", { textContent: fx.meta.loop ? "loop" : `${fx.meta.duration}s` })]),
       ]);
@@ -113,7 +119,7 @@ function build() {
       const t = tiles.find((x) => x.fig === e.target);
       t.visible = e.isIntersecting;
       if (t.visible && !t.player) {
-        t.player = new Player(t.cv, t.fx, 6 / 5, 1.25);
+        t.player = isScreen(t.fx) ? new Player(t.cv, t.fx, 16 / 9, 1) : new Player(t.cv, t.fx, 6 / 5, 1.25);
         if (reduced) t.player.seek(t.fx.meta.duration * 0.4);
       }
     }
@@ -162,8 +168,9 @@ function filter() {
 let detail = null;
 function openDetail(fx) {
   const d = $("#detail");
-  const big = $("#big");
-  detail = new Player(big, fx, 16 / 10, 1.6);
+  const big = $("#big"), screen = isScreen(fx);
+  big.parentElement.classList.toggle("screen", screen);
+  detail = screen ? new Player(big, fx, 16 / 9, 1) : new Player(big, fx, 16 / 10, 1.6);
   const m = fx.meta;
   $("#d-name").textContent = m.name;
   $("#d-id").textContent = fx.id;

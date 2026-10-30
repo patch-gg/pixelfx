@@ -1,76 +1,113 @@
-import { cycle, rng, TAU } from "../../core/index.js";
-import { steps, SPECTRAL, SKULL_7, shape } from "./_lib.js";
+import { cycle, fit, clamp, smooth, tileNoise, TAU, WHITE, mix } from "../../core/index.js";
+import { halo } from "./_lib.js";
 
 export const meta = {
   name: "Necro skulls",
-  desc: "Ghostly green skulls circle a point on a tilted orbit, trailing smoke, jaws chattering, dimming as they swing behind.",
-  tags: ["shadow", "necromancy", "skull", "ghost", "undead", "orbit", "loop"],
-  size: [60, 46],
-  origin: [30, 26],
-  duration: 2.4,
+  desc: "Spectral skulls circle a cold green flame on a tilted orbit, passing behind and before it, eyes lit, trailing curls of ghost smoke.",
+  tags: ["shadow", "necromancy", "skull", "orbit", "ghost", "spectral", "magic", "loop"],
+  size: [136, 116],
+  origin: [68, 108],
+  duration: 3,
   loop: true,
   fps: 30,
-  bg: "dark",
-  options: { palette: SPECTRAL, count: 5, radius: 18, seed: 7 },
+  bg: "ground",
+  options: {
+    palette: ["#040e10", "#0a2228", "#0f3d44", "#16615f", "#23907f", "#45c4a0", "#9af0c8", "#e8fff4"],
+    bone: ["#0c1a1c", "#2c4a4a", "#5c847c", "#a6cdb8", "#e4fff0"],
+    seed: 6,
+  },
 };
 
-export function draw(p, t, o) {
-  const C = steps(o.palette), S = o.seed, D = meta.duration, ph = t / D, n = o.count, RX = o.radius, RY = RX * 0.32;
+// the flame's base and height; the orbit (centre, radii, tilt); six skulls, one turn a loop
+const CY = -52, FB = -32, FH = 34, RX = 42, RY = 11, TILT = -0.12, D = 3, N = 5;
+const SKULL = [
+  "...kkkkk...",
+  ".kkhhhllkk.",
+  "khhhhlllmmk",
+  "khhllllllmk",
+  "kleeeleeemk",
+  "kleeeleeedk",
+  "kmleelleedk",
+  ".kmllnllmk.",
+  ".kmmlnlmdk.",
+  "..kmmmmmk..",
+  "..ktgtgtk..",
+  "...kkkkk...",
+];
 
-  // where skull i is at loop phase q: one turn a loop, its own wobble in radius and height
-  const where = (i, q) => {
-    const r = rng(S, i), th = q * TAU + (i * TAU) / n + r.range(-0.25, 0.25);
-    const rad = 1 + 0.12 * Math.sin(q * TAU * 2 + r.range(0, TAU));
-    const bob = Math.sin(q * TAU * 3 + r.range(0, TAU)) * 1.6;
-    return [Math.cos(th) * RX * rad, Math.sin(th) * RY * rad + bob, Math.sin(th)];
-  };
+// a skull's place at t: round the tilted orbit, bobbing; z > 0 is in front of the flame
+function skullAt(i, t) {
+  const a = (TAU * t) / D + (i * TAU) / N, ex = Math.cos(a) * RX, ey = Math.sin(a) * RY;
+  const bob = Math.sin((TAU * 2 * t) / D + i * 1.7) * 2;
+  return { x: ex * Math.cos(TILT) - ey * Math.sin(TILT), y: CY + ex * Math.sin(TILT) + ey * Math.cos(TILT) + bob, z: Math.sin(a), a };
+}
 
-  const skulls = [];
-  for (let i = 0; i < n; i++) skulls.push({ i, pos: where(i, ph) });
-  skulls.sort((a, b) => a.pos[2] - b.pos[2]); // far first
-
-  const core = () => {
-    // a cold flame at the center the skulls are bound to
-    const fl = 0.8 + 0.2 * Math.sin(ph * TAU * 6);
-    p.ellipse(0, -1, 2.2 * fl, 3.4 * fl, (d) => (d < 0.45 ? C[7] : d < 0.8 ? C[6] : C[5]));
-    p.glow(0, -1, 26, C[5], 0.22 * fl);
-    p.glow(0, -1, 8, C[6], 0.35 * fl);
-  };
-
-  let coreDone = false;
-  for (const { i, pos } of skulls) {
-    const [x, y, depth] = pos, far = depth < 0;
-    if (!far && !coreDone) (core(), (coreDone = true));
-    // smoke tail: the path it just came along, thinning and darkening
-    for (let j = 6; j >= 1; j--) {
-      const [tx, ty] = where(i, ph - j * 0.018);
-      const rr = 2.8 - j * 0.38, c = j > 4 ? C[2] : j > 2 ? C[3] : C[4];
-      p.circle(tx, ty + 0.5, rr, far ? C[Math.max(1, (j > 4 ? 2 : j > 2 ? 3 : 4) - 1)] : c);
-    }
-    // the skull: pale bone, darker when it swings behind, jaw chattering
-    const chat = Math.sin(ph * TAU * 8 + i * 2.1) > 0.3 ? 1 : 0;
-    const top = far ? C[5] : C[7], body = far ? C[4] : C[6], dark = far ? C[2] : C[4];
-    const sx = Math.round(x) - 3, sy = Math.round(y) - 4;
-    shape(p, SKULL_7, sx, sy, (ch, mx, my) => {
-      if (ch === "e") return C[0];
-      if (ch === "n" || ch === "t") return dark;
-      if (my >= 5) return null;
-      return my === 0 || (my === 1 && mx < 4) ? top : body;
-    });
-    // jaw: drops a pixel when it chatters
-    shape(p, SKULL_7.slice(5), sx, sy + 5 + chat, (ch) => (ch === "t" ? C[0] : ch === "#" ? (far ? C[4] : C[5]) : 0));
-    // eyes burn
-    if (!far || depth > -0.5) {
-      p.px(sx + 1, sy + 3, C[7]), p.px(sx + 4, sy + 3, C[7]);
-      p.light(x, y - 1, C[6], far ? 0.15 : 0.3);
-    }
+// ghost smoke curling off behind each skull along its orbit: puffs that swell, rise and thin with age
+function tail(p, C, i, t) {
+  for (let k = 8; k >= 1; k--) {
+    const tt = t - k * 0.05, s = skullAt(i, tt), age = k / 8;
+    const r = 2 + age * 3.6, a = (1 - age) * 0.5 * (0.6 + 0.4 * (s.z + 1) / 2);
+    p.disc(s.x, s.y - age * 7 + 2, r, age < 0.4 ? C[5] : age < 0.7 ? C[4] : C[3], a);
   }
-  if (!coreDone) core();
+}
 
-  // motes rising off the circle
-  cycle(t, D, 10, S + 3, (r) => r.range(0.7, 1.2), (age, life, r) => {
-    const k = age / life, a = r.range(0, TAU), x = Math.cos(a) * RX * r.range(0.4, 1.1);
-    const y = Math.sin(a) * RY - age * r.range(10, 17) + Math.sin(age * 7 + r.next() * 6);
-    p.px(x, y, k < 0.5 ? C[6] : C[4]);
+function drawSkull(p, C, K, s, t, i) {
+  const front = s.z >= 0, depth = 0.55 + 0.45 * (s.z + 1) / 2;
+  const PAL = front
+    ? { k: K[0], d: K[1], m: K[2], l: K[3], h: K[4], e: C[0], n: C[0], t: K[3], g: K[0] }
+    : { k: K[0], d: K[0], m: K[1], l: K[2], h: K[3], e: C[0], n: C[0], t: K[2], g: K[0] };
+  const x0 = Math.round(s.x) - 5, y0 = Math.round(s.y) - 6;
+  p.sprite(SKULL, PAL, x0, y0);
+  // eyes: cold points of light in the dark, flaring as the skull swings toward us
+  const k = (0.5 + 0.5 * Math.sin((TAU * 3 * t) / D + i * 2.1)) * 0.5 + 0.5;
+  for (const ex of [3, 7]) {
+    p.px(x0 + ex + 0.5, y0 + 5.5, front ? (k > 0.75 ? WHITE : C[7]) : C[6]);
+    if (front) p.px(x0 + ex + 0.5, y0 + 4.5, C[5]);
+    p.glow(x0 + ex + 1, y0 + 6, 6, C[5], 0.45 * depth * k);
+  }
+  p.glow(s.x, s.y, 11, C[4], 0.18 * depth);
+}
+
+// the cold flame: a body that swells off its base and tapers into licking tongues, white only low in its heart,
+// cooling outward and upward through the ghost greens, scrolling up (the noise wraps once a loop)
+function flame(p, C, t) {
+  const W = 10, scroll = t / D;
+  p.shade(-W - 4, FB - FH - 4, W + 4, FB + 2, (x, y, out) => {
+    const u = (FB - y) / FH;
+    if (u < -0.04 || u >= 1) return;
+    const n1 = tileNoise(x * 0.3, y * 0.2 + scroll * 8, 0, 8, 3), n2 = tileNoise(x * 0.6, y * 0.45 + scroll * 16, 0, 16, 5);
+    const prof = u < 0.22 ? 0.35 + 0.65 * Math.sqrt(Math.max(0, u) / 0.22) : Math.pow(1 - (u - 0.22) / 0.78, 0.85);
+    const w = W * prof * (1 + 0.3 * n1) + n2 * 2.2 * u, sway = n1 * 3 * u * u, d = Math.abs(x - sway) / Math.max(0.6, w);
+    if (d > 1) return;
+    const heat = Math.pow(1 - d, 0.7) * Math.pow(Math.max(0, 1 - u), 0.55) + n2 * 0.12;
+    if (((Math.floor(x) + Math.floor(y)) & 1) === 0) out.k = 0.16 * heat;
+    return heat > 0.82 ? WHITE : heat > 0.66 ? C[7] : heat > 0.46 ? C[6] : heat > 0.27 ? C[5] : heat > 0.12 ? C[4] : C[3];
   });
+  p.glow(0, FB - FH * 0.35, 40, C[5], 0.45);
+  p.glow(0, FB - 5, 12, C[7], 0.25);
+}
+
+export function drawBack(p, t, o) {
+  const C = fit(o.palette, 8), K = fit(o.bone, 5);
+  p.glow(0, -1, 40, C[4], 0.2);
+  // the far half of the orbit: tails and skulls behind the flame, back to front
+  const order = Array.from({ length: N }, (_, i) => [i, skullAt(i, t)]).filter(([, s]) => s.z < 0).sort((a, b) => a[1].z - b[1].z);
+  for (const [i] of order) tail(p, C, i, t);
+  for (const [i, s] of order) drawSkull(p, C, K, s, t, i);
+}
+
+export function draw(p, t, o) {
+  const C = fit(o.palette, 8), K = fit(o.bone, 5), S = o.seed;
+  // motes and cold sparks rising off the flame
+  cycle(t, D, 18, S, (r) => r.range(0.8, 1.4), (age, L, r) => {
+    const x0 = r.range(-6, 6), u = age / L, x = x0 + Math.sin(u * 5 + r.range(0, 6)) * 3 * u, y = FB - 6 - u * r.range(36, 56);
+    p.dot(x, y, u < 0.5 ? C[7] : C[6], u < 0.7 ? 1 : (1 - u) * 3.3);
+    p.glow(x, y, 3, C[6], 0.3 * (1 - u));
+  });
+  flame(p, C, t);
+  // the near half of the orbit, back to front
+  const order = Array.from({ length: N }, (_, i) => [i, skullAt(i, t)]).filter(([, s]) => s.z >= 0).sort((a, b) => a[1].z - b[1].z);
+  for (const [i] of order) tail(p, C, i, t);
+  for (const [i, s] of order) drawSkull(p, C, K, s, t, i);
+  halo(p, 0, CY, 0, 46, C[4], 0.12);
 }

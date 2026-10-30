@@ -1,74 +1,94 @@
-import { PAL, cycle, clamp, rng, rand, TAU, WHITE } from "../../core/index.js";
-import { steps, glowPath, jagged } from "./_lib.js";
+// Arcs leaping between points of the silhouette's edge, re-struck every other frame, grounding to the floor, and
+// the periodic jolt that throws sparks follow Sprite Fusion's open-source lightning crackle
+// (https://www.spritefusion.com/pixel-art-vfx/lightning), MIT License, Copyright (c) 2026 Hugo Duprez.
+import { fit, clamp, rng, cycle, TAU, WHITE, hex, luma } from "../../core/index.js";
+import { VOLT, PLASMA, zigzag, crackle, flight, spark } from "./_lib.js";
 
 export const meta = {
   name: "Electrified",
-  desc: "Static crawls over the body: short arcs jump between points on the silhouette, sparks spit off, and every so often the whole outline flares.",
-  tags: ["lightning", "electric", "status", "shock", "debuff", "loop"],
-  size: [40, 44],
-  origin: [20, 40],
-  duration: 1.2,
+  desc: "Current runs through a character: arcs crawl over and leap across the body, sparks spit off, the body flares to an electric silhouette on each jolt, and the feet ground out.",
+  tags: ["lightning", "electric", "status", "shock", "stun", "actor", "loop"],
+  size: [108, 92],
+  origin: [54, 76],
+  duration: 2,
   loop: true,
   fps: 30,
   bg: "ground",
-  actor: true,
-  options: { palette: PAL.volt, arcs: 3, seed: 13 },
+  actor: 2,
+  options: { palette: VOLT, sparks: PLASMA, seed: 5 },
 };
 
-const RATE = 15;
-const rims = new WeakMap();
+const FPS = 30, N = 60, P = 2, JOLTS = [[3, 1], [22, 0.7], [41, 0.9]];
+const edges = new WeakMap();
+// the silhouette's edge pixels, in local space
+function edgeOf(A) {
+  let e = edges.get(A.mask);
+  if (e) return e;
+  const m = A.mask, on = (x, y) => x >= 0 && y >= 0 && x < m.w && y < m.h && m.data[y * m.w + x];
+  e = [];
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (on(x, y) && (!on(x - 1, y) || !on(x + 1, y) || !on(x, y - 1) || !on(x, y + 1))) e.push([A.x + x + 0.5, A.y + y + 0.5]);
+  edges.set(A.mask, e);
+  return e;
+}
+const jolt = (f) => {
+  for (const [f0, k] of JOLTS) if (f >= f0 && f < f0 + 3) return { a: f - f0, k };
+  return null;
+};
 
-// points just outside the silhouette, with the outward direction at each
-function rim(a) {
-  let list = rims.get(a.mask);
-  if (list) return list;
-  const m = a.mask, inside = (x, y) => x >= 0 && y >= 0 && x < m.w && y < m.h && m.data[y * m.w + x];
-  list = [];
-  for (let y = -1; y <= m.h; y++)
-    for (let x = -1; x <= m.w; x++) {
-      if (inside(x, y)) continue;
-      const nx = inside(x - 1, y) - inside(x + 1, y), ny = inside(x, y - 1) - inside(x, y + 1);
-      if (nx || ny || inside(x - 1, y) || inside(x, y - 1)) list.push([a.x + x, a.y + y, nx, ny]);
-    }
-  rims.set(a.mask, list);
-  return list;
+export function drawBack(p, t, o) {
+  const C = fit(o.palette, 8), A = o.actor, f = Math.floor(t * FPS + 1e-6) % N, j = jolt(f), r = rng(o.seed, 4, f);
+  // a cold aura: a broken outline that flickers round the body, light pooling at the feet
+  p.outline(A.mask, A.x, A.y, j ? C[4] : r.next() < 0.5 ? C[2] : C[1]);
+  p.glow(0, -18, 30, C[3], (j ? 0.55 * j.k : 0.16 + 0.1 * r.next()));
+  p.glow(0, -2, 22, C[4], 0.18);
 }
 
 export function draw(p, t, o) {
-  const C = steps(o.palette, 7), S = o.seed, a = o.actor, R = rim(a), beat = Math.floor(t * RATE);
-  const fresh = t * RATE - beat < 0.5;
-  // the flare: twice a cycle the whole body lights up for a frame, then just its outline for one more
-  const flare = beat % 9 === 4 ? (fresh ? 2 : 1) : 0;
-  if (flare === 2) p.mask(a.mask, a.x, a.y, C[5]);
-  if (flare) p.outline(a.mask, a.x, a.y, flare === 2 ? WHITE : C[5]);
-  // arcs: each beat a few short zigzags hop between two points on the rim, bowing out from the body
-  for (let i = 0; i < o.arcs; i++) {
-    const r = rng(S, beat, i), A = R[Math.floor(r.next() * R.length)];
-    let best = null;
-    for (let k = 0; k < 6; k++) {
-      const B = R[Math.floor(r.next() * R.length)], d = Math.hypot(B[0] - A[0], B[1] - A[1]);
-      if (d >= 5 && d <= 12) { best = B; break; }
-    }
-    if (!best) continue;
-    const pts = jagged(r, A[0], A[1], best[0], best[1], { step: 2.5, amp: 1.6 });
-    const nx = (A[2] + best[2]) * 0.6, ny = (A[3] + best[3]) * 0.6;
-    const bowed = pts.map(([x, y], j) => {
-      const s = Math.sin((Math.PI * j) / (pts.length - 1));
-      return [x + nx * s * 2, y + ny * s * 2];
-    });
-    p.polyline(bowed, fresh ? WHITE : C[5]);
-    if (fresh) for (const [x, y] of [bowed[0], bowed[bowed.length - 1]]) p.px(x, y, C[6]);
-    glowPath(p, bowed, 6, C[4], fresh ? 0.35 : 0.2, 2);
+  const C = fit(o.palette, 8), S = o.sparks.map(hex), A = o.actor, E = edgeOf(A), f = Math.floor(t * FPS + 1e-6) % N, j = jolt(f);
+  // the jolt: the body flares to an electric silhouette, then fades back through its own shading
+  if (j) {
+    const lift = [1.1, 0.6, -0.2][j.a] * j.k, ramp = [C[1], C[2], C[3], C[4], C[5], C[6], C[7]];
+    for (let y = 0; y < A.h; y++)
+      for (let x = 0; x < A.w; x++) {
+        const c = A.pixels[y * A.w + x];
+        if (c) p.px(A.x + x, A.y + y, ramp[clamp(Math.round(0.4 + luma(c) * 6 + lift), 0, 6)]);
+      }
+    p.glow(0, -19, 26, C[5], 0.5 * j.k * (1 - j.a / 3));
   }
-  // sparks spit off the rim and fall
-  cycle(t, meta.duration, 10, S + 5, (r) => r.range(0.12, 0.22), (age, life, r) => {
-    const P = R[Math.floor(r.next() * R.length)], k = age / life;
-    const vx = (P[2] || r.range(-1, 1)) * r.range(30, 60), vy = (P[3] || 0) * 30 - r.range(20, 50);
-    const x = P[0] + vx * age, y = P[1] + vy * age + 200 * age * age;
-    if (y > 0) return;
-    p.line(x, y, x - vx * 0.03, y - vy * 0.03, k < 0.5 ? WHITE : C[4]);
+  // arcs: two or three at a time, re-struck every other frame, leaping between nearby points of the edge
+  const r = rng(o.seed, 7, f >> 1), n = 2 + (j ? 2 : r.int(0, 1));
+  for (let i = 0; i < n; i++) {
+    const a = r.pick(E), ang = r.range(0, TAU), d = r.range(6, 14);
+    let b = [a[0] + Math.cos(ang) * d, a[1] + Math.sin(ang) * d];
+    for (let k = 0; k < 10; k++) {
+      const c = r.pick(E);
+      if (Math.hypot(c[0] - b[0], c[1] - b[1]) < 5 && Math.hypot(c[0] - a[0], c[1] - a[1]) > 4) b = c;
+    }
+    const k = (f & 1 ? 0.75 : 0.95) * r.range(0.6, 1);
+    crackle(p, zigzag(rng(o.seed, 8, f, i), a[0], a[1], b[0], b[1], 0.42, 0.35), k, C, 0.4);
+    // the edge catches the light where an arc touches it
+    for (const [x, y] of E) if (Math.hypot(x - a[0], y - a[1]) < 3.5 || Math.hypot(x - b[0], y - b[1]) < 3) p.px(x - 0.5, y - 0.5, C[5]);
+  }
+  // the feet ground out to the floor now and then
+  if (r.next() < (j ? 0.9 : 0.35)) {
+    const s = r.sign(), x0 = s * r.range(3, 8);
+    crackle(p, zigzag(rng(o.seed, 9, f), x0, -1.5, x0 + s * r.range(5, 12), -0.5, 0.45, 0.3), 0.7, C, 0.35);
+    p.glow(x0, -1, 10, C[5], 0.35);
+  }
+  // sparks: a spray off the edge with every jolt, and a few spat out between them
+  for (const [f0, k] of JOLTS) {
+    const age = (((t - f0 / FPS) % P) + P) % P;
+    for (let i = 0; i < 9; i++) {
+      const q = rng(o.seed, 21, f0, i), life = q.range(0.18, 0.4);
+      if (age >= life) continue;
+      const [x0, y0] = E[Math.floor(q.next() * E.length)], ang = Math.atan2(y0 + 19, x0) + q.range(-0.7, 0.7), sp = q.range(60, 150) * k;
+      const [x, y, vx, vy] = flight(x0, y0, Math.cos(ang) * sp, Math.sin(ang) * sp - 30, age, { floor: 0 });
+      spark(p, x, y, vx, vy, 1 - age / life, S);
+    }
+  }
+  cycle(t, P, 8, o.seed + 3, (g) => g.range(0.15, 0.3), (age, life, q) => {
+    const [x0, y0] = E[Math.floor(q.next() * E.length)], ang = Math.atan2(y0 + 19, x0) + q.range(-0.6, 0.6), sp = q.range(50, 110);
+    const [x, y, vx, vy] = flight(x0, y0, Math.cos(ang) * sp, Math.sin(ang) * sp - 20, age, { floor: 0 });
+    spark(p, x, y, vx, vy, 1 - age / life, S);
   });
-  // a jittery glow that never settles
-  const j = 0.75 + 0.25 * rand(S, beat, 9);
-  p.glow(a.chest[0], a.chest[1] - 1, 20, C[4], (flare ? 0.32 : 0.18) * j);
 }

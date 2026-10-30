@@ -1,86 +1,103 @@
-import { PAL, ramp, rng, burst, fly, seg, ease, clamp, noise, WHITE } from "../../core/index.js";
-import { puff } from "./_lib.js";
+// The rocks, grit and dust are adapted from Sprite Fusion's open-source explosion
+// (https://www.spritefusion.com/pixel-art-vfx/explosion), MIT License, Copyright (c) 2026 Hugo Duprez.
+import { Particles, Bits, P, B, Rng, fit, band, clamp, smooth, ease, TAU, WHITE, mix, hex } from "../../core/index.js";
+import { stone, makeCracks, drawCracks, dustRing, rock, rockShape, SOOT } from "./_lib.js";
 
 export const meta = {
   name: "Heavy landing",
-  desc: "Something heavy lands: the floor dents and cracks out both ways, two rings of dust spread over the floor one after the other, pebbles hop.",
-  tags: ["impact", "land", "ground", "crack", "dust", "heavy", "one-shot"],
-  size: [80, 32],
-  origin: [40, 24],
-  duration: 1,
+  desc: "A character lands hard: the floor dents and cracks under their feet, two rings of dust roll out along the floor one after the other, and pebbles hop away.",
+  tags: ["impact", "landing", "ground", "stomp", "dust", "rocks", "actor", "one-shot"],
+  size: [176, 80],
+  origin: [88, 60],
+  duration: 1.6,
   loop: false,
   fps: 30,
   bg: "ground",
-  options: { palette: PAL.dust, stone: PAL.stone, size: 1, seed: 16 },
+  actor: 2,
+  options: { palette: ["#1c1a24", "#2f2a3a", "#4a4258", "#6b6280", "#9088a4", "#bdb6cc", "#e6e1ee"], stone: "#4a3f69", seed: 14 },
 };
 
-// a crack: a jagged path along the floor face, from the dent outward, with a branch or two
-function crackPaths(r, side, len) {
-  const paths = [];
-  let x = side * 2, y = 0;
-  const main = [[x, y]];
-  while (Math.abs(x) < len) {
-    x += side * r.range(2, 4.5);
-    y = clamp(y + r.range(-1.2, 1.6), 0, 3);
-    main.push([x, Math.round(y)]);
+// the dent: the floor's edge pressed into a shallow dish, scuffed lips either side
+function dent(p, st, k) {
+  for (let x = -10; x <= 9; x++) {
+    const q = Math.abs(x + 0.5) / 10, dep = Math.round(1.8 * (1 - q * q));
+    if (q < 0.82) {
+      for (let y = 0; y < dep; y++) p.dot(x, y, SOOT, k);
+      p.dot(x, dep, st.lip, k);
+    } else p.dot(x, -1, q > 0.92 ? st.light : st.lip, k);
   }
-  paths.push(main);
-  for (let b = 0; b < 2; b++) {
-    const i = 1 + Math.floor(r.next() * (main.length - 2));
-    const [bx, by] = main[i], br = [[bx, by]];
-    let xx = bx, yy = by;
-    for (let s = 0; s < 3; s++) (xx += side * r.range(1.5, 3)), (yy = clamp(yy + r.range(0.6, 1.6), 0, 5)), br.push([xx, Math.round(yy)]);
-    paths.push(br);
-  }
-  return paths;
 }
 
-export function draw(p, t, o) {
-  const D = ramp(o.palette), G = ramp(o.stone), S = o.seed, k = o.size, N = D.length - 1;
-  // the crack runs out from the dent in a couple of frames, then sits until it fades
-  const grow = ease.outCubic(seg(t, 0, 0.1)), cf = 1 - seg(t, 0.68, 0.94);
-  if (cf > 0) {
-    [-1, 1].forEach((side, j) => {
-      for (const path of crackPaths(rng(S, j), side, (12 + j * 4) * k)) {
-        const keep = path.filter(([x]) => Math.abs(x) <= 2 + grow * 20 * k);
-        if (keep.length < 2) continue;
-        p.polyline(keep.map(([x, y]) => [x, y + 1]), G[5], cf); // the lit lower lip
-        p.polyline(keep, G[0], cf);
-      }
-    });
-    // the dent: the floor edge knocked down at the impact
-    p.rect(-3, 0, 6, 1, G[0], cf);
-    p.rect(-2, 1, 4, 1, G[1], cf);
+export function create(o) {
+  const C = fit(o.palette, 7), st = stone(o.stone), R = new Rng(o.seed), floor = () => 0, D = meta.duration;
+  // the rings' far halves go behind the character, the near halves and all the debris in front
+  const back = new Particles({ rng: R, ground: floor }), front = new Particles({ rng: R, ground: floor });
+  const bits = new Bits({ ground: floor }), cracks = makeCracks(R, 6, { len: [8, 20], dive: 0.7, maxY: 12, forks: 0.4, x0: [2, 6] });
+  const DUST = mix(st.dust, C[5], 0.4), LIT = mix(DUST, WHITE, 0.3), PH = R.range(0, TAU);
+  // puffs riding each ring out along the floor
+  const ring = (n, v0, v1, size, delay) => {
+    for (let i = 0; i < n; i++) {
+      const g = (i / n) * TAU + R.range(-0.1, 0.1), v = R.range(v0, v1), far = Math.sin(g) < 0;
+      (far ? back : front).spawn(P.DUST, Math.cos(g) * 4, Math.sin(g) * 0.7 - 1, Math.cos(g) * v, Math.sin(g) * v * 0.16 - R.range(2, 10), R.range(0.45, 0.8), R.chance(0.45) ? LIT : DUST, R.range(size[0], size[1]), delay + R.range(0, 0.03));
+    }
+  };
+  ring(20, 140, 190, [2.2, 3.4], 0.01);
+  ring(18, 70, 110, [3.4, 5.4], 0.12);
+  // and a low cloud at the feet that rises a little and hangs
+  for (let i = 0; i < 12; i++) {
+    const s = R.sign(), up = i < 6;
+    (i % 2 ? front : back).spawn(P.DUST, s * R.range(2, 10), -R.range(1, 4), s * R.range(10, 35) * (up ? 0.6 : 1), -(up ? R.range(25, 60) : R.range(4, 12)), R.range(0.55, 0.9), R.chance(0.5) ? LIT : DUST, R.range(3, 5), R.range(0.02, 0.1));
   }
-  // the floor edge flashes out from the feet for a frame or two
-  const fl = seg(t, 0, 0.07);
-  if (fl < 1) p.line(-10 * fl - 8, 0, 10 * fl + 8, 0, (u) => (Math.abs(u - 0.5) < 0.25 ? WHITE : D[N]));
-  if (t < 0.035) p.ellipse(0, -1, 9 * k, 3 * k, (d) => (d < 0.5 ? WHITE : D[N]), (d, a) => (Math.sin(a) > 0.1 ? 0 : 1));
-  // two rings of dust spreading over the floor, the second smaller and later: thin far arcs that crumble,
-  // with puffs riding the ends where they meet the floor
-  [[0.02, 0.62, 30], [0.14, 0.8, 19]].forEach(([t0, t1, R], ri) => {
-    const q = seg(t, t0, t1);
-    if (q <= 0 || q >= 1) return;
-    const rx = (4 + R * ease.outCubic(q)) * k, ry = Math.max(2, rx * 0.24), th = 1.6 + (1 - q) * 1.2;
-    p.shade(-rx - 1, -ry - 1, rx + 1, 0, (x, y, out) => {
-      const d = Math.sqrt((x / rx) ** 2 + (y / ry) ** 2);
-      if (d > 1 || d < 1 - th / ry) return;
-      const ang = Math.atan2(y / ry, x / rx);
-      if (noise(ang * 5 + ri * 7, S + ri) < -1 + 2.1 * ease.inQuad(q)) return;
-      out.c = d > 1 - th / ry / 2 ? D[N] : D[N - 1];
-    });
-    burst(6, S + 3 + ri, (r, i) => {
-      const side = i % 2 ? 1 : -1, x = side * rx * r.range(0.86, 1.02), y = -1 - q * r.range(1, 5);
-      const rad = (1 + r.range(1, 2.4) * ease.outCubic(seg(q, 0, 0.3))) * (1 - 0.75 * ease.inQuad(seg(q, 0.35, 1))) * k;
-      puff(p, x, Math.min(y, -rad * 0.7), rad, D.slice(2), 1 - seg(q, 0.85, 1), 0.5 - q * 0.6, 0.8);
-    });
-  });
-  // pebbles knocked loose: hop out, land, roll a touch
-  burst(6, S + 1, (r, i) => {
-    const side = i % 2 ? 1 : -1, life = r.range(0.4, 0.6);
-    if (t > life) return;
-    const vx = side * r.range(25, 70) * k, vy = -r.range(45, 85), g = 380, T1 = (-2 * vy) / g;
-    const x = t < T1 ? vx * t : vx * T1 + vx * 0.3 * (t - T1), y = t < T1 ? fly(0, 0, vx, vy, t, g)[1] : 0;
-    p.px(side * 2 + x, y - 1, r.next() < 0.5 ? G[5] : G[4]);
-  });
+  // pebbles that hop away along the floor, and grit
+  for (let i = 0; i < 12; i++) {
+    const s = R.sign(), v = R.range(50, 130);
+    bits.add({ kind: B.CHUNK, x: s * R.range(3, 8), y: -1, vx: s * v, vy: -R.range(140, 230), g: 1, drag: 0.5, bounce: 0.55, life: R.range(1, 1.45), a: R.range(0, TAU), va: s * R.range(8, 16), s: R.chance(0.3) ? 2 : 1, pts: rockShape(R) });
+  }
+  for (let i = 0; i < 24; i++) {
+    const s = R.sign(), a = -Math.PI / 2 + s * R.range(0.3, 1.2), v = R.range(60, 170);
+    front.spawn(P.GRIT, s * R.range(2, 7), -1, Math.cos(a) * v, Math.sin(a) * v, R.range(0.6, 1.1), R.pick([st.light, st.body, st.lip]), R.chance(0.3) ? 2 : 1);
+  }
+
+  let t = 0;
+  // the two dust rings themselves: soft bands on the floor, the second slower, lumpier and later
+  const rings = (p, far) => {
+    for (const [t0, dur, r1, w, k0, edge] of [[0.01, 0.45, 58, 4.5, 0.75, 1], [0.12, 0.85, 42, 6, 0.8, 0]]) {
+      const g = (t - t0) / dur;
+      if (g <= 0 || g >= 1) continue;
+      const r = 6 + r1 * ease.outCubic(g);
+      dustRing(p, 0, 0, r, w * (1 + g), k0 * Math.pow(1 - g, 1.2) * Math.min(1, g / 0.06), DUST, { sy: 0.2, ph: PH + t0 * 10, brk: g * 0.8, half: far ? -1 : 1 });
+      // the fast ring's leading edge: a crisp lit band on the floor
+      if (edge && g < 0.75) band(p, 0, 0.5, r + 2, 0.2, Math.max(1, 2.5 * (1 - g)), 1.1 - g / 0.75, [st.body, st.light, LIT, WHITE], (a) => Math.sin(a) < 0 === far);
+    }
+  };
+  return {
+    update(dt) {
+      t += dt;
+      for (const b of bits.list) b.pvy = b.vy;
+      bits.update(dt);
+      for (const b of bits.list)
+        if (b.pvy > 80 && b.vy <= 0) {
+          front.spawn(P.DUST, b.x, -0.5, R.sign() * R.range(6, 20), -R.range(2, 10), R.range(0.25, 0.45), DUST, R.range(1, 1.8));
+          b.pvy = 0;
+        }
+      back.update(dt);
+      front.update(dt);
+    },
+    drawBack(p) {
+      const fade = 1 - smooth(D - 0.5, D - 0.1, t);
+      dent(p, st, fade);
+      drawCracks(p, cracks, (c) => c.len * ease.outCubic(clamp((t - c.t0) / 0.08)), () => 0, [WHITE, WHITE, WHITE, WHITE], SOOT, st.light, fade);
+      rings(p, true);
+      back.draw(p);
+    },
+    draw(p) {
+      rings(p, false);
+      front.draw(p);
+      for (const b of bits.list) rock(p, b, st);
+      // the thud: a flat streak of light along the floor for a frame or two
+      if (t < 0.035) p.ellipse(0, 0, 15, 2.5, (d) => (d < 0.55 ? WHITE : C[6]));
+      else if (t < 0.07) for (let x = -22; x <= 22; x++) p.dot(x, 0, Math.abs(x) < 10 ? WHITE : C[5], 1 - Math.abs(x) / 24);
+      if (t < 0.12) p.glowLine(-20, 0, 20, 0, 8, C[6], 0.45 * (1 - t / 0.12));
+    },
+  };
 }
