@@ -1,0 +1,138 @@
+<p align="center">
+  <img src="docs/readme/montage.gif" width="800" alt="A grid of pixel art effects playing at once: fire, explosions, ice, lightning, slashes, magic, weather, pickups and critters.">
+</p>
+
+# pixelfx.
+
+**<!-- count -->299<!-- /count --> pixel art effects and animations, every one a small piece of code.** Fire,
+explosions, magic, weather, UI, pickups, critters and more. Play them live, recolor and mirror them, drop them into
+a browser game, or export sprite sheets for any engine. Plus a Claude Code skill that makes new ones the way a
+picky pixel artist would: draft, render, look, refine.
+
+**[open the gallery](https://patch-gg.github.io/pixelfx/)** · [catalog](docs/CATALOG.md) · [the skill](#the-skill) ·
+[make your own](#make-your-own) · [how it works](#how-it-works)
+
+The method is [Hugo Duprez](https://x.com/HugoDuprez)'s, from [How to make (good) pixel art effects with
+Claude](https://www.spritefusion.com/blog/how-to-make-good-pixel-art-effects-with-claude): code is clay, trust your
+eyes, feed your references. His [open-source effects](https://www.spritefusion.com/pixel-art-vfx) at Sprite Fusion
+set the bar. This repo is our take on the idea at library scale, with a skill to keep going.
+
+## what's in it.
+
+<!-- catalog -->
+| category | effects | some of them |
+|---|---|---|
+| **fire** | 17 | brazier, campfire, candle, ember burst, fire breath, fire ring… |
+| **explosions** | 16 | barrel explosion, big explosion, cartoon pow, chain explosions, dirt explosion, dust cloud… |
+| **water** | 15 | bubbles, drip, fountain, geyser, puddle step, rain splash… |
+| **ice** | 13 | blizzard vortex, cold mist, freeze, frost breath, frost nova, frozen ground… |
+| **lightning** | 14 | ball lightning, chain lightning, charge up, electric field, electrified, lightning dash… |
+| **sci-fi** | 15 | cloak, data stream, emp blast, energy core, force field, glitch… |
+| **melee** | 16 | axe chop, claw swipe, counter flash, dagger flurry, double slash, hammer smash… |
+| **impacts** | 14 | blunt hit, bullet impact, combo hit, critical hit, ground slam, heavy landing… |
+| **projectiles** | 17 | arrow, arrow hit, boomerang, bullet tracer, cannonball, energy disc… |
+| **spawn & death** | 13 | coin drop, disintegrate, dissolve burn, egg hatch, ghost out, poof… |
+| **arcane** | 16 | arcane beam, arcane missiles, arcane orb, blink in, blink out, enchant… |
+| **holy** | 12 | blessing, divine shield, feather burst, halo, heal, healing ring… |
+| **shadow** | 14 | black hole, curse, dark explosion, doom mark, eclipse, grasping hands… |
+| **status** | 16 | bleeding, burning, charmed, confused, cursed, fortified… |
+| **nature** | 15 | acid splash, boulder, earth spike, healing bloom, leaf storm, poison cloud… |
+| **weather** | 16 | aurora, blizzard, cherry blossoms, clouds, falling leaves, fireflies… |
+| **ui** | 19 | achievement, button press, checkmark, coin collect, combo counter, confetti… |
+| **pickups** | 15 | ammo crate, chest open, coin spin, collect burst, crystal shard, gem spin… |
+| **transitions** | 12 | blinds, burn away, crt off, diamond wipe, dither fade, glitch wipe… |
+| **critters** | 14 | bat, bird, butterfly, crab, eyeball, fish school… |
+<!-- /catalog -->
+
+Every effect is a file in `src/fx/<category>/<name>.js`. The [catalog](docs/CATALOG.md) lists them all.
+
+## use one.
+
+**In a browser game** (canvas, Phaser, PixiJS, Kaplay, three.js), use the code. No dependencies.
+
+```js
+import { createFrame, clearFrame, createFx, composite } from "pixelfx";
+import * as frostNova from "pixelfx/fx/ice/frost-nova";
+
+const frame = createFrame(320, 180);                   // your game's pixel resolution
+const img = new ImageData(320, 180);
+const fx = createFx(frostNova, { x: 160, y: 140 });   // also: flip, angle, seed, palette, light...
+
+function tick(dt) {
+  fx.update(dt);
+  clearFrame(frame);
+  fx.draw(frame, "back");                              // behind characters
+  drawCharacters();
+  fx.draw(frame, "front");
+  composite(frame, img.data, backgroundColor);         // color, then light added on top
+  ctx.putImageData(img, 0, 0);                         // scale up with image-rendering: pixelated
+}
+```
+
+Install from GitHub with `npm i github:patch-gg/pixelfx`, or copy `src/core` and the effects you want.
+
+**In any engine** (Godot, Unity, GameMaker, Defold, LÖVE, Bevy), use sprite sheets:
+
+```bash
+node tools/render.mjs ice/frost-nova --sheet
+```
+
+That writes a transparent PNG of every frame in a grid and an Aseprite-style JSON (frame rects, durations, and
+`meta.pixelfx` with fps, loop, columns and the pivot). Phaser's atlas loader and the Aseprite importers for Godot
+and Unity read it. `node tools/sheets.mjs` exports the whole library to `sheets/`.
+
+Any effect takes a `palette` (a dark-to-bright ramp of hex colors), so a fire can burn blue and a heal can glow
+pink without touching its code:
+
+```bash
+node tools/render.mjs fire/torch --gif --opts '{"palette": ["#102","#215","#43a","#8cf","#cff","#fff"]}'
+```
+
+## the skill.
+
+The `pixelfx` skill teaches Claude Code to find, use, export and make effects. Install it as a plugin:
+
+```
+/plugin marketplace add patch-gg/pixelfx
+/plugin install pixelfx@pixelfx
+```
+
+or copy `skills/pixelfx` into `~/.claude/skills/`. Then ask for what you want:
+
+- "Add a frost nova to my mage's ultimate."
+- "Make five takes on a coin pickup sparkle and show me the best two."
+- "Export the fire and explosions categories as sprite sheets for Godot."
+- "This hit effect feels floaty. Make it punchier."
+
+## make your own.
+
+```bash
+node tools/new.mjs arcane/my-spell       # a working starting point (add --loop for a loop)
+node tools/render.mjs arcane/my-spell    # records/arcane/my-spell/contact.png: look at it
+node tools/check.mjs arcane/my-spell     # spills, seams, unseeded randomness, slow frames
+```
+
+Then go round: look at the contact sheet, fix the worst thing, render again. `--gif` and `--mp4` show the motion,
+`--all` shows every frame. [docs/AUTHORING.md](docs/AUTHORING.md) has the contract, the drawing API and the quality
+bar. `node tools/serve.mjs` runs the gallery locally with your effects in it.
+
+## how it works.
+
+- **An effect is a function of time.** `draw(p, t, o)` draws the frame at `t` seconds. No simulation state, no
+  images, so any frame can be drawn in any order: scrubbed, looped, or rendered to a sheet.
+- **Two buffers.** `color` takes hard, opaque pixels; transparency is faked with a 4×4 ordered dither, so it stays
+  pixel art. `light` takes additive glow, added on top. Hot things look hot because of the light buffer.
+- **Seeded everything.** Particles get their own repeatable random numbers (`burst`, `cycle`, `rng(seed, i)`), and
+  their motion is closed-form (`fly`: gravity and drag without stepping), so frame 40 is the same every time.
+  Loops tile in time with no seam.
+- **Local space.** Effects draw around their own origin; the painter places, mirrors and rotates them. Directional
+  effects face right. A 12×19 stock character stands in for status effects, auras and hits.
+- **Same frame shape as Sprite Fusion's VFX** (`{ w, h, ox, oy, color, light }`), so both libraries can draw into
+  one frame.
+
+## license.
+
+MIT, code and effects. Use them in anything, commercial included. The Patch Pixel font in `gallery/fonts` is
+Patch's own and not covered; see its notice.
+
+Made by [Patch](https://patch.gg).
