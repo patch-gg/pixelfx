@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/readme/montage.gif" width="800" alt="A grid of pixel art effects playing at once: fire, explosions, ice, lightning, slashes, magic, weather, pickups and critters.">
+  <img src="docs/readme/montage.gif" width="800" alt="A grid of pixel art effects playing at once: a campfire, a burning skull, a waterfall, a plasma ball, a portal, a tornado and more.">
 </p>
 
 # pixelfx.

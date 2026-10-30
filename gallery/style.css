@@ -70,7 +70,7 @@ h1 { margin: 0; font: 400 54px/66px var(--display); letter-spacing: 0; }
   border-bottom: 1px solid var(--line);
 }
 .bar-in { max-width: 1240px; margin: 0 auto; display: flex; gap: 12px; align-items: center; padding-block: 10px; }
-.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; padding-block: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 0; padding-block: 2px; }
 .chips::-webkit-scrollbar { display: none; }
 .chip {
   flex: none;
@@ -88,7 +88,7 @@ h1 { margin: 0; font: 400 54px/66px var(--display); letter-spacing: 0; }
 .chip[aria-pressed="true"] span { color: #555; }
 #q {
   flex: none;
-  width: 180px;
+  width: 108px;
   max-width: 40vw;
   background: none;
   border: 1px solid var(--line);
@@ -190,6 +190,8 @@ pre {
 }
 @media (max-width: 520px) {
   .bar-in { flex-wrap: wrap; }
+  /* 20 categories won't fit a phone's bar: they scroll in one row there */
+  .chips { flex-wrap: nowrap; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; }
   #q { width: 100%; max-width: none; }
 }
 @media (max-width: 330px) {
