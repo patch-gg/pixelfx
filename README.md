@@ -133,7 +133,6 @@ bar. `node tools/serve.mjs` runs the gallery locally with your effects in it.
 ## license.
 
 MIT, code and effects. Use them in anything, commercial included. Parts are adapted from Hugo Duprez's MIT effects,
-as the [license](LICENSE) notes. The Patch Pixel font in `gallery/fonts` is Patch's own and not covered; see its
-notice.
+and the Patch Pixel font in `gallery/fonts` is Patch's own and not covered: see [NOTICE.md](NOTICE.md).
 
 Made by [Patch](https://patch.gg).
