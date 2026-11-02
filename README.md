@@ -93,6 +93,11 @@ pink without touching its code:
 node tools/render.mjs fire/torch --gif --opts '{"palette": ["#102","#215","#43a","#8cf","#cff","#fff"]}'
 ```
 
+**In a pixel editor**, 207 of the effects are on
+[SimplePixelArt](https://simplepixelart.com/collections/pixelfx) as animations you can open in the browser, recolor
+frame by frame, draw on, and export as a GIF or a sprite sheet with Aseprite JSON. Each one credits this repo and
+its MIT license. The full-screen transitions and a few of the heaviest explosions are left out.
+
 ## acting.
 
 <p align="center">
