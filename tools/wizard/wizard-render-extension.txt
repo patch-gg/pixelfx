@@ -1,0 +1,77 @@
+
+// The garment writes into the same per-pixel depth buffer as the stock dummy.
+const WIZARD_COLORS = {
+ cloth: ['#9581be','#79649f','#5c4b80','#40365d'],
+ gold: ['#e5d19e','#bda274','#91764f','#625339'],
+ void: ['#11131f','#11131f','#11131f','#11131f'],
+};
+function wizardTriangle(a,b,c,tri) {
+ const cross3=(u,v)=>[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+ const normal=unit(cross3(sub(b,a),sub(c,a)));
+ // Two-sided rendering keeps the robe closed during extreme poses.
+ const light=dot(normal,LIGHT),level=light>.65?0:light>.2?1:light>-.3?2:3;
+ const color=hex(WIZARD_COLORS[tri.material][level])>>>0;
+ const x0=Math.max(-OX,Math.floor(Math.min(a[0],b[0],c[0]))),x1=Math.min(BW-OX-1,Math.ceil(Math.max(a[0],b[0],c[0])));
+ const y0=Math.max(OY-BH+1,Math.floor(Math.min(a[1],b[1],c[1]))),y1=Math.min(OY,Math.ceil(Math.max(a[1],b[1],c[1])));
+ const den=(b[1]-c[1])*(a[0]-c[0])+(c[0]-b[0])*(a[1]-c[1]);
+ if(Math.abs(den)<1e-9)return;
+ for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+  if(clipBody&&y<1.5)continue;
+  const u=((b[1]-c[1])*(x-c[0])+(c[0]-b[0])*(y-c[1]))/den;
+  const v=((c[1]-a[1])*(x-c[0])+(a[0]-c[0])*(y-c[1]))/den,w=1-u-v;
+  if(u<-.001||v<-.001||w<-.001)continue;
+  plot((OY-y)*BW+OX+x,u*a[2]+v*b[2]+w*c[2]+.03,1,tri.part,2,x,y,color);
+ }
+}
+function drawWizardClothing(S){
+ const pts=activeWizardPoints??evaluateWizardSkin(WIZARD_MESH,S.B);
+ curFrameIndex=-1;
+ for(const t of WIZARD_MESH.triangles)wizardTriangle(pts[t.v[0]],pts[t.v[1]],pts[t.v[2]],t);
+}
+export function wizardBindingInfo(){return {bindings:WIZARD_MESH.bindings,vertices:WIZARD_MESH.vertices.length,triangles:WIZARD_MESH.triangles.length};}
+export function wizardSkinState(pose={}){
+ const S=solve(pose),whole=(S.q.yaw??0)+(S.q.face===-1?Math.PI:0);
+ if(whole)turnAll(S,whole);
+ return {mesh:WIZARD_MESH,frames:S.B,points:evaluateWizardSkin(WIZARD_MESH,S.B)};
+}
+function clothFrameState(pose){
+ const S=solve(pose),whole=(S.q.yaw??0)+(S.q.face===-1?Math.PI:0);
+ if(whole)turnAll(S,whole);
+ const root=[pose.x??0,-(pose.y??0),0],world=p=>add(p,root);
+ const targets=evaluateWizardSkin(WIZARD_MESH,S.B).map(world),capsules=[];
+ for(const side of ['N','F']){
+  const hip=side==='N'?S.hipN:S.hipF,L=side==='N'?S.legN:S.legF;
+  capsules.push({a:world(hip),b:world(L.joint),r:3.35},{a:world(L.joint),b:world(L.end),r:2.35});
+ }
+ return {S,root,targets,capsules};
+}
+/** One stateful character instance. update(dt, pose) or update(dt, time => pose).
+ * A pose sampler is sampled at 120 Hz, yielding identical simulation at
+ * different display frame rates. pixels() renders fresh, bypassing pose cache.
+ */
+export function createWizardCharacter(options={}){
+ let current={...(options.initialPose??{})},state=clothFrameState(current),acc=0,clock=0;
+ const sim=createClothSimulation(WIZARD_MESH,state.targets,options);
+ return {
+  update(dt,pose=current){
+   if(!Number.isFinite(dt)||dt<0)throw Error('dt must be nonnegative finite seconds');
+   acc+=Math.min(dt,.1);
+   while(acc>=sim.dt-1e-10){
+    clock+=sim.dt;current={...(typeof pose==='function'?pose(clock):pose)};
+    state=clothFrameState(current);sim.step(state.targets,state.capsules);acc-=sim.dt;
+   }
+   return this;
+  },
+  pixels(){
+   const points=state.targets.map(p=>sub(p,state.root));
+   for(const [id,p] of sim.positions())points[id]=sub(p,state.root);
+   activeWizardPoints=points;
+   try{return render(current);}finally{activeWizardPoints=null;}
+  },
+  state(){
+   return {pose:{...current},root:state.root.slice(),points:sim.positions(),targets:state.targets,capsules:state.capsules,
+    diagnostics:sim.diagnostics(state.targets,state.capsules),mesh:WIZARD_MESH};
+  },
+  reset(pose={}){current={...pose};state=clothFrameState(current);sim.reset(state.targets);acc=0;clock=0;return this;},
+ };
+}

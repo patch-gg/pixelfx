@@ -1,0 +1,25 @@
+{
+  "idle": {
+    "sourceFrames": 48,
+    "encodedFrames": 46,
+    "durationMs": 4000,
+    "colors": 10
+  },
+  "castBody": {
+    "sourceFrames": 48,
+    "encodedFrames": 44,
+    "durationMs": 4000,
+    "colors": 13
+  },
+  "castFull": {
+    "sourceFrames": 48,
+    "encodedFrames": 44,
+    "durationMs": 4000,
+    "colors": 18
+  },
+  "idleLoop": {
+    "endpointDifferencePixels": 0,
+    "lastToFirstDifferencePixels": 6,
+    "maxAdjacentDifferencePixels": 23
+  }
+}

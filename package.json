@@ -15,7 +15,10 @@
   "scripts": {
     "render": "node tools/render.mjs",
     "check": "node tools/check.mjs",
-    "gallery": "node tools/serve.mjs"
+    "gallery": "node tools/serve.mjs",
+    "wizard:build": "node tools/wizard/build-wizard-rig.mjs",
+    "wizard:check": "node tools/wizard/verify.mjs && node tools/wizard/check-cloth.mjs",
+    "wizard:export": "node tools/wizard/export-actions.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.10"

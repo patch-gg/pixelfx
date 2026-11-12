@@ -1,0 +1,1070 @@
+{
+  "frames": {
+    "wizard-cast-full_00.png": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_01.png": {
+      "frame": {
+        "x": 128,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_02.png": {
+      "frame": {
+        "x": 256,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_03.png": {
+      "frame": {
+        "x": 384,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_04.png": {
+      "frame": {
+        "x": 512,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_05.png": {
+      "frame": {
+        "x": 640,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_06.png": {
+      "frame": {
+        "x": 768,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_07.png": {
+      "frame": {
+        "x": 896,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_08.png": {
+      "frame": {
+        "x": 0,
+        "y": 80,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_09.png": {
+      "frame": {
+        "x": 128,
+        "y": 80,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_10.png": {
+      "frame": {
+        "x": 256,
+        "y": 80,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_11.png": {
+      "frame": {
+        "x": 384,
+        "y": 80,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_12.png": {
+      "frame": {
+        "x": 512,
+        "y": 80,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_13.png": {
+      "frame": {
+        "x": 640,
+        "y": 80,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_14.png": {
+      "frame": {
+        "x": 768,
+        "y": 80,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_15.png": {
+      "frame": {
+        "x": 896,
+        "y": 80,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_16.png": {
+      "frame": {
+        "x": 0,
+        "y": 160,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_17.png": {
+      "frame": {
+        "x": 128,
+        "y": 160,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_18.png": {
+      "frame": {
+        "x": 256,
+        "y": 160,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_19.png": {
+      "frame": {
+        "x": 384,
+        "y": 160,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_20.png": {
+      "frame": {
+        "x": 512,
+        "y": 160,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_21.png": {
+      "frame": {
+        "x": 640,
+        "y": 160,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_22.png": {
+      "frame": {
+        "x": 768,
+        "y": 160,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_23.png": {
+      "frame": {
+        "x": 896,
+        "y": 160,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_24.png": {
+      "frame": {
+        "x": 0,
+        "y": 240,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_25.png": {
+      "frame": {
+        "x": 128,
+        "y": 240,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_26.png": {
+      "frame": {
+        "x": 256,
+        "y": 240,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_27.png": {
+      "frame": {
+        "x": 384,
+        "y": 240,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_28.png": {
+      "frame": {
+        "x": 512,
+        "y": 240,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_29.png": {
+      "frame": {
+        "x": 640,
+        "y": 240,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_30.png": {
+      "frame": {
+        "x": 768,
+        "y": 240,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_31.png": {
+      "frame": {
+        "x": 896,
+        "y": 240,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_32.png": {
+      "frame": {
+        "x": 0,
+        "y": 320,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_33.png": {
+      "frame": {
+        "x": 128,
+        "y": 320,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_34.png": {
+      "frame": {
+        "x": 256,
+        "y": 320,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_35.png": {
+      "frame": {
+        "x": 384,
+        "y": 320,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_36.png": {
+      "frame": {
+        "x": 512,
+        "y": 320,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_37.png": {
+      "frame": {
+        "x": 640,
+        "y": 320,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_38.png": {
+      "frame": {
+        "x": 768,
+        "y": 320,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_39.png": {
+      "frame": {
+        "x": 896,
+        "y": 320,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_40.png": {
+      "frame": {
+        "x": 0,
+        "y": 400,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_41.png": {
+      "frame": {
+        "x": 128,
+        "y": 400,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_42.png": {
+      "frame": {
+        "x": 256,
+        "y": 400,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_43.png": {
+      "frame": {
+        "x": 384,
+        "y": 400,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_44.png": {
+      "frame": {
+        "x": 512,
+        "y": 400,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_45.png": {
+      "frame": {
+        "x": 640,
+        "y": 400,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    },
+    "wizard-cast-full_46.png": {
+      "frame": {
+        "x": 768,
+        "y": 400,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 84
+    },
+    "wizard-cast-full_47.png": {
+      "frame": {
+        "x": 896,
+        "y": 400,
+        "w": 128,
+        "h": 80
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 80
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 80
+      },
+      "duration": 83
+    }
+  },
+  "meta": {
+    "app": "pixelfx wizard actions",
+    "image": "wizard-cast-full-sheet.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 1024,
+      "h": 480
+    },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "wizard-cast-full",
+        "from": 0,
+        "to": 47,
+        "direction": "forward"
+      }
+    ],
+    "pixelfx": {
+      "fps": 12,
+      "loop": false,
+      "pivot": {
+        "x": 40,
+        "y": 61
+      },
+      "events": [
+        {
+          "name": "windup",
+          "time": 0,
+          "frame": 0
+        },
+        {
+          "name": "charge",
+          "time": 0.5,
+          "frame": 6
+        },
+        {
+          "name": "release",
+          "time": 1.75,
+          "frame": 21
+        },
+        {
+          "name": "recovery",
+          "time": 2.1,
+          "frame": 25
+        },
+        {
+          "name": "ready",
+          "time": 3.5,
+          "frame": 42
+        },
+        {
+          "name": "end",
+          "time": 4,
+          "frame": 47
+        }
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # Catalog
 
-244 effects in 21 categories. Every one is a file in
+247 effects in 21 categories. Every one is a file in
 `src/fx/<category>/<name>.js`; render any of them with `node tools/render.mjs <id> --gif`.
 
 ## moves
@@ -38,6 +38,7 @@ torches, breath, pillars, walls of flame.
 | Flame pillar | `fire/flame-pillar` | one-shot 5s | 184×256 | The floor cracks and glows, a column of fire erupts white-hot and roars, spewing embers and shedding flame, then collapses into rolling smoke. |
 | Flamethrower | `fire/flamethrower` | loop 1.6s | 184×104 | A pressurised jet shooting right: a blue pilot at the nozzle, a tight stream with surges racing down it, a sputter, burning drops falling off, a tip that curls up into smoke. |
 | Meteor | `fire/meteor` | one-shot 5s | 272×232 | A burning rock streaks in from the upper left in a comet of fire and smashes into the floor: a white flash, a fireball, rocks and brands thrown, a glowing crater that cools. |
+| Meteor fall | `fire/meteor-fall` | one-shot 3.6s | 320×264 | A molten meteor falls with a streaming fire tail, bursts into glowing black rock and sparks, and leaves smouldering cracks and rising embers. |
 | Spirit flame | `fire/spirit-flame` | loop 3s | 80×124 | A cold blue-teal ghost fire floating in the air: a bright rim round a hollow dark heart, a wave climbing its wispy tail, curls breaking off, cold sparks rising. |
 | Torch | `fire/torch` | loop 2s | 72×120 | A wall torch on an iron bracket: a licking flame leaping off a pitch-soaked wrap, licks and puffs torn off its tips, smoke, embers, a flickering light on the wall. |
 
@@ -89,6 +90,7 @@ spikes, novas, freezing, shattering.
 | Freeze | `ice/freeze` | one-shot 4s | 176×128 | Frost races in and climbs the character, turning it to ice; a faceted block crystallizes round it pane by pane, glints, cracks and bursts, and the character thaws free. |
 | Frost breath | `ice/frost-breath` | loop 1.2s | 184×104 | A cone of icy wind blowing right: frost puffs billow out, swell and sink, wind streaks race through, ice crystals tumble and glint off a white-hot mouth. |
 | Frost nova | `ice/frost-nova` | one-shot 3.4s | 288×192 | Frost spirals into a spinning snowflake, then a wave blooms three rings of ice crystals round the caster; snow drifts, frost creeps, and the ice melts back into the floor. |
+| Ice block fall | `ice/ice-block-fall` | one-shot 3.6s | 320×264 | A massive faceted ice block descends trailing snow, shatters into skidding crystal shards and cold mist, and spreads a bright frost ring across the floor. |
 | Ice crystal | `ice/ice-crystal` | loop 3s | 96×100 | A floating ice crystal turning slowly in its own cold light: its facets brighten and darken as they turn, glints flash on them, frost motes circle it. |
 | Ice lance | `ice/ice-lance` | loop 0.8s | 176×64 | A faceted ice spear flying right: a light pulse runs through its core, rings of cold air shear off the tip, frost peels off into a wake and crystals shed behind it. |
 | Ice shatter | `ice/ice-shatter` | one-shot 2.8s | 224×112 | A block of ice takes a hit from the left: it jolts, cracks race over its faces, it flashes white and bursts into chunks that tumble, bounce and skid off in a roll of ice dust. |
@@ -290,6 +292,7 @@ poison, vines, thorns, quakes.
 |---|---|---|---|---|
 | Acid splash | `nature/acid-splash` | one-shot 2.8s | 184×116 | A gob of acid bursts into a crown and spatters; it eats a glowing, smoking pit into the floor and boils down into it, spitting bright beads, pale steam curling off. |
 | Boulder | `nature/boulder` | one-shot 2.3s | 264×120 | A spinning boulder arcs right shedding dust and pebbles, smashes into the floor in a white flash and bursts into tumbling chunks, gravel and rolling dust. |
+| Boulder fall | `nature/boulder-fall` | one-shot 3.6s | 320×264 | A rune-bound boulder hangs overhead, plummets onto an earth sigil and shatters into heavy bouncing slabs, golden fault lines and settling ochre dust. |
 | Earth spike | `nature/earth-spike` | one-shot 3.4s | 272×150 | The floor cracks with light and heaves, a faceted stone spike rams up with two side shards in a burst of chips, grit and dust; rubble rains, then it splits and crumbles. |
 | Healing bloom | `nature/healing-bloom` | one-shot 3.3s | 124×120 | A sprout pushes up and unfurls, a bud swells and opens round a glowing golden heart in a flare of healing light; its petals lift away one by one as motes. |
 | Leaf storm | `nature/leaf-storm` | loop 2.4s | 112×104 | Leaves tumble up a rising spiral round the character, passing behind and in front, turning and flipping, wrapped in bright bands of wind; litter swirls at their feet. |
