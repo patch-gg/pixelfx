@@ -161,15 +161,22 @@ export function canvas(w, h, fill = [12, 11, 16, 255]) {
   return {
     w, h, data,
     paste(src, sw, sh, x, y) {
+      // Straight-alpha Porter-Duff over. The old path wrote src*alpha into RGB while
+      // keeping source alpha, which baked premultiplied glow into sprite sheets and
+      // made soft light look like a dark drop-shadow in engines that expect straight PNG.
       for (let yy = 0; yy < sh; yy++) {
         const ty = y + yy;
         if (ty < 0 || ty >= h) continue;
         for (let xx = 0; xx < sw; xx++) {
           const tx = x + xx;
           if (tx < 0 || tx >= w) continue;
-          const s = (yy * sw + xx) * 4, d = (ty * w + tx) * 4, a = src[s + 3] / 255;
-          for (let c = 0; c < 3; c++) data[d + c] = src[s + c] * a + data[d + c] * (1 - a);
-          data[d + 3] = Math.max(data[d + 3], src[s + 3]);
+          const s = (yy * sw + xx) * 4, d = (ty * w + tx) * 4;
+          const sa = src[s + 3] / 255;
+          if (sa <= 0) continue;
+          const da = data[d + 3] / 255, oa = sa + da * (1 - sa);
+          if (oa <= 0) continue;
+          for (let c = 0; c < 3; c++) data[d + c] = (src[s + c] * sa + data[d + c] * da * (1 - sa)) / oa;
+          data[d + 3] = oa * 255;
         }
       }
     },
