@@ -1,0 +1,45 @@
+name: sheets
+
+# Render every effect to a sprite sheet and attach the set to the release
+# of a pushed tag, so a tool that reads PNG and JSON can use the library
+# without Node. A manual run uploads the same zip as a workflow artifact.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sheets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: node tools/check.mjs
+      - run: node tools/sheets.mjs
+      - name: Name the zip
+        id: name
+        run: echo "zip=pixelfx-sheets-${GITHUB_REF_NAME}.zip" >> "$GITHUB_OUTPUT"
+      - name: Zip the sheets with the license
+        run: |
+          cp LICENSE NOTICE.md sheets/
+          cd sheets && zip -qr "../${{ steps.name.outputs.zip }}" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.zip }}
+          path: ${{ steps.name.outputs.zip }}
+      - name: Attach the zip to the release of the tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
+            || gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Sprite sheets of every effect: ${{ steps.name.outputs.zip }}"
+          gh release upload "${GITHUB_REF_NAME}" "${{ steps.name.outputs.zip }}" --clobber
