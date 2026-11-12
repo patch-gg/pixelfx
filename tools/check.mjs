@@ -73,6 +73,28 @@ const count = (buf, test) => {
   for (let i = 0; i < buf.length; i++) if (test(buf[i], i)) n++;
   return n;
 };
+const num = (v) => typeof v === "number" && Number.isFinite(v);
+
+function checkMap(mod, meta, errs, notes) {
+  const m = mod.map, [W, H] = meta.size;
+  if (!m || typeof m !== "object") return errs.push("kind is map but there is no map export");
+  if (meta.actor) errs.push("a map must not declare meta.actor");
+  if (!meta.loop) errs.push("a map should loop");
+  if (!(m.groundY > H * 0.45 && m.groundY < H)) errs.push(`map.groundY ${m.groundY} is not in the lower half of the ${W}x${H} canvas`);
+  if (!Array.isArray(m.walk) || !m.walk.length) errs.push("map.walk is empty");
+  for (const span of m.walk ?? []) if (!Array.isArray(span) || span.length !== 2 || !(span[0] >= 0 && span[1] <= W && span[1] > span[0])) errs.push(`map.walk span ${JSON.stringify(span)} is invalid`);
+  const spawns = m.spawns ?? {};
+  for (const [name, p] of Object.entries(spawns)) {
+    for (const q of Array.isArray(p[0]) ? p : [p]) {
+      if (!Array.isArray(q) || !num(q[0]) || !num(q[1])) { errs.push(`map.spawns.${name} is not [x, y]`); continue; }
+      if (!(q[0] >= 0 && q[0] <= W && q[1] >= 0 && q[1] <= H)) errs.push(`map.spawns.${name} ${q} is outside the canvas`);
+      if (Math.abs(q[1] - m.groundY) > 4) errs.push(`map.spawns.${name} is ${Math.abs(q[1] - m.groundY)} px off groundY`);
+      if (!(m.walk ?? []).some(([a, b]) => q[0] >= a && q[0] <= b)) errs.push(`map.spawns.${name} ${q} is not over a walkable span`);
+    }
+  }
+  if (!spawns.hero) notes.push("map has no hero spawn");
+  for (const p of m.platforms ?? []) if (!(p[0] >= 0 && p[0] + p[2] <= W && p[1] > 0 && p[1] < m.groundY)) errs.push(`map.platforms entry [${p}] is outside the map or below the ground`);
+}
 
 for (const id of ids) {
   const errs = [], notes = [];
@@ -91,6 +113,8 @@ for (const id of ids) {
     const taken = Object.keys(meta.options ?? {}).filter((k) => ["x", "y", "flip", "angle", "light"].includes(k));
     if (taken.length) errs.push(`option ${taken.join(", ")} is reserved for placement and glow: rename it`);
     if (/Math\.random/.test(src)) errs.push("uses Math.random: use rng/rand/burst/cycle so frames repeat");
+    if (meta.kind === "map") checkMap(mod, meta, errs, notes);
+    else if (meta.kind) notes.push(`meta.kind "${meta.kind}" is not used by this repo: omit it or use kind "map" for battle maps`);
     if (mod.act) checkAct(fx, errs, notes);
     if (errs.length) throw new Error(errs.join("; "));
 

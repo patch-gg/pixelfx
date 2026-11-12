@@ -220,6 +220,59 @@ export class Painter {
       o.a = call(a, u, v);
     });
   }
+  /**
+   * Blit a w x h color buffer (0 = transparent) with its top-left at (x, y). This is the fast path for a map's
+   * cached static layers: no per-pixel shape tests and no rotation maths on the common unflipped case.
+   */
+  image(buf, bw, bh, x = 0, y = 0) {
+    if (this.sn === 0 && this.fx === 1) {
+      const X = Math.round(x), Y = Math.round(y);
+      const x0 = Math.max(0, this.ox - X), x1 = Math.min(bw, this.ox + this.w - X);
+      const y0 = Math.max(0, this.oy - Y), y1 = Math.min(bh, this.oy + this.h - Y);
+      for (let yy = y0; yy < y1; yy++) {
+        const dst = (Y + yy - this.oy) * this.w + X - this.ox;
+        const src = yy * bw;
+        for (let xx = x0; xx < x1; xx++) {
+          const c = buf[src + xx];
+          if (c) this.C[dst + xx] = c;
+        }
+      }
+      return;
+    }
+    for (let yy = 0; yy < bh; yy++)
+      for (let xx = 0; xx < bw; xx++) {
+        const c = buf[yy * bw + xx];
+        if (c) this.put(this.cellX(x + xx, y + yy), this.cellY(x + xx, y + yy), c);
+      }
+  }
+  /** Add a cached w x h light buffer (0 = no light) with its top-left at (x, y). */
+  lightImage(buf, bw, bh, x = 0, y = 0) {
+    if (this.sn === 0 && this.fx === 1) {
+      const X = Math.round(x), Y = Math.round(y), k = this.fade * this.lightK;
+      if (k <= 0.004) return;
+      const x0 = Math.max(0, this.ox - X), x1 = Math.min(bw, this.ox + this.w - X);
+      const y0 = Math.max(0, this.oy - Y), y1 = Math.min(bh, this.oy + this.h - Y);
+      for (let yy = y0; yy < y1; yy++) {
+        const dst = (Y + yy - this.oy) * this.w + X - this.ox;
+        const src = yy * bw;
+        for (let xx = x0; xx < x1; xx++) {
+          const l = buf[src + xx];
+          if (!(l & 0xffffff)) continue;
+          const i = dst + xx, d = this.L[i];
+          const r = Math.min(255, (d & 255) + (l & 255) * k) | 0;
+          const g = Math.min(255, ((d >>> 8) & 255) + ((l >>> 8) & 255) * k) | 0;
+          const b = Math.min(255, ((d >>> 16) & 255) + ((l >>> 16) & 255) * k) | 0;
+          this.L[i] = (255 << 24) | (b << 16) | (g << 8) | r;
+        }
+      }
+      return;
+    }
+    for (let yy = 0; yy < bh; yy++)
+      for (let xx = 0; xx < bw; xx++) {
+        const l = buf[yy * bw + xx];
+        if (l & 0xffffff) this.light(x + xx, y + yy, l, 1);
+      }
+  }
   /** Filled rectangle. */
   rect(x, y, w, h, c, a = 1) {
     if (this.sn === 0) {

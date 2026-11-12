@@ -4,7 +4,7 @@
 
 # pixelfx.
 
-**<!-- count -->244<!-- /count --> pixel art effects and animations, every one a small piece of code.** Fire,
+**<!-- count -->250<!-- /count --> pixel art effects and animations, every one a small piece of code.** Fire,
 explosions, magic, weather, UI, pickups, critters and more. Play them live, recolor and mirror them, drop them into
 a browser game, or export sprite sheets for any engine. Plus a Claude Code skill that makes new ones the way a
 picky pixel artist would: draft, render, look, refine.
@@ -51,6 +51,7 @@ the idea at library scale, with a skill to keep going.
 | **pickups** | 11 | chest open, coin spin, collect burst, crystal shard, gem spin, heart pickup… |
 | **transitions** | 10 | blinds, burn away, crt off, diamond wipe, glitch wipe, iris… |
 | **critters** | 12 | bat, bird, butterfly, eyeball, fish school, flying skull… |
+| **world** | 6 | aurora pass, crystal hollow, ember depths, mossy ruins, sunscar temple, wisp marsh |
 <!-- /catalog -->
 
 Every effect is a file in `src/fx/<category>/<name>.js`. The [catalog](docs/CATALOG.md) lists them all.

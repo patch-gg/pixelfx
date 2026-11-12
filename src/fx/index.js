@@ -244,6 +244,12 @@ import * as critters_jellyfish from "./critters/jellyfish.js";
 import * as critters_slime from "./critters/slime.js";
 import * as critters_snake from "./critters/snake.js";
 import * as critters_wisp from "./critters/wisp.js";
+import * as world_aurora_pass from "./world/aurora-pass.js";
+import * as world_crystal_hollow from "./world/crystal-hollow.js";
+import * as world_ember_depths from "./world/ember-depths.js";
+import * as world_mossy_ruins from "./world/mossy-ruins.js";
+import * as world_sunscar_temple from "./world/sunscar-temple.js";
+import * as world_wisp_marsh from "./world/wisp-marsh.js";
 
 export { categories } from "./categories.js";
 
@@ -492,4 +498,10 @@ export const effects = {
   "critters/slime": critters_slime,
   "critters/snake": critters_snake,
   "critters/wisp": critters_wisp,
+  "world/aurora-pass": world_aurora_pass,
+  "world/crystal-hollow": world_crystal_hollow,
+  "world/ember-depths": world_ember_depths,
+  "world/mossy-ruins": world_mossy_ruins,
+  "world/sunscar-temple": world_sunscar_temple,
+  "world/wisp-marsh": world_wisp_marsh,
 };

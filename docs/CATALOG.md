@@ -1,6 +1,6 @@
 # Catalog
 
-244 effects in 21 categories. Every one is a file in
+250 effects in 22 categories. Every one is a file in
 `src/fx/<category>/<name>.js`; render any of them with `node tools/render.mjs <id> --gif`.
 
 ## moves
@@ -393,3 +393,16 @@ slimes, bats, ghosts, frogs.
 | Slime | `critters/slime` | loop 1.8s | 112×88 | A glossy slime hops in place: it squashes to wind up, stretches into the jump, rounds out in the air, splats down flinging droplets that creep back, then wobbles and blinks. |
 | Snake | `critters/snake` | loop 2.4s | 136×56 | A snake slithers along the floor, head raised: humps rise and roll back down its patterned body to the tail, dust puffs where it touches down, its forked tongue flicks. |
 | Wisp | `critters/wisp` | loop 3.2s | 128×104 | A will-o'-the-wisp loops a figure-eight over the floor: a little soul-flame with a face, its flame tail licking up and streaming behind, shedding puffs and sparks. |
+
+## world
+
+battle maps: moonlit ruins, lava caverns, arenas with a layout.
+
+| effect | id | | size | what it does |
+|---|---|---|---|---|
+| Aurora Pass | `world/aurora-pass` | loop 12s | 320×180 | A frozen mountain pass beneath green aurora curtains: snow-bound massifs catch the sky, frosted conifers climb the shoulders and wind lifts loose snow across a quiet shelf. |
+| Crystal Hollow | `world/crystal-hollow` | loop 10s | 320×180 | An underground reservoir framed by violet crystal clusters: cyan facets breathe with light, a narrow waterfall feeds the pool and drops open small rings in the dark. |
+| Ember Depths | `world/ember-depths` | loop 9s | 320×180 | A basalt arena under a volcano: lava falls pour down both walls, a broken bridge smoulders in the dark, heat haze drifts over glowing fissures and ash falls. |
+| Mossy Ruins | `world/mossy-ruins` | loop 10s | 320×180 | A moonlit clearing inside broken elven ruins: mist drifts over a cracked flagstone floor, fireflies wander the arch and leaves fall through the cold light. |
+| Sunscar Temple | `world/sunscar-temple` | loop 12s | 320×180 | A sandstone sanctuary half buried in sunset dunes: wind carries sand through broken columns, torn banners sway and a sun seal glows above the distant temple door. |
+| Wisp Marsh | `world/wisp-marsh` | loop 12s | 320×180 | A flooded twilight marsh crossed by a stone causeway: ghost lights drift between crooked roots, luminous mushrooms shed spores and bubbles spread rings across the black water. |
