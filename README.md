@@ -12,6 +12,9 @@ picky pixel artist would: draft, render, look, refine.
 Every effect that involves a character is **acted out**: he winds up, lets go, freezes on contact and recovers, and a
 target takes the hit. Twelve whole moves chain the effects into attacks from wind-up to recovery.
 
+It's also a block on Patch: [play pixelfx on Patch](https://patch.gg/patch/pixel-effects), pick an effect and a
+palette, and start a browser game from it.
+
 **[open the gallery](https://patch-gg.github.io/pixelfx/)** · [catalog](docs/CATALOG.md) · [acting](#acting) ·
 [the skill](#the-skill) · [make your own](#make-your-own) · [publish it on patch](#publish-it-on-patch) ·
 [how it works](#how-it-works)
