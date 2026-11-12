@@ -22,6 +22,7 @@ import * as fire_fireball from "./fire/fireball.js";
 import * as fire_flame_pillar from "./fire/flame-pillar.js";
 import * as fire_flamethrower from "./fire/flamethrower.js";
 import * as fire_meteor from "./fire/meteor.js";
+import * as fire_meteor_fall from "./fire/meteor-fall.js";
 import * as fire_spirit_flame from "./fire/spirit-flame.js";
 import * as fire_torch from "./fire/torch.js";
 import * as explosions_barrel_explosion from "./explosions/barrel-explosion.js";
@@ -52,6 +53,7 @@ import * as ice_blizzard_vortex from "./ice/blizzard-vortex.js";
 import * as ice_freeze from "./ice/freeze.js";
 import * as ice_frost_breath from "./ice/frost-breath.js";
 import * as ice_frost_nova from "./ice/frost-nova.js";
+import * as ice_ice_block_fall from "./ice/ice-block-fall.js";
 import * as ice_ice_crystal from "./ice/ice-crystal.js";
 import * as ice_ice_lance from "./ice/ice-lance.js";
 import * as ice_ice_shatter from "./ice/ice-shatter.js";
@@ -176,6 +178,7 @@ import * as status_slowed from "./status/slowed.js";
 import * as status_stunned from "./status/stunned.js";
 import * as nature_acid_splash from "./nature/acid-splash.js";
 import * as nature_boulder from "./nature/boulder.js";
+import * as nature_boulder_fall from "./nature/boulder-fall.js";
 import * as nature_earth_spike from "./nature/earth-spike.js";
 import * as nature_healing_bloom from "./nature/healing-bloom.js";
 import * as nature_leaf_storm from "./nature/leaf-storm.js";
@@ -270,6 +273,7 @@ export const effects = {
   "fire/flame-pillar": fire_flame_pillar,
   "fire/flamethrower": fire_flamethrower,
   "fire/meteor": fire_meteor,
+  "fire/meteor-fall": fire_meteor_fall,
   "fire/spirit-flame": fire_spirit_flame,
   "fire/torch": fire_torch,
   "explosions/barrel-explosion": explosions_barrel_explosion,
@@ -300,6 +304,7 @@ export const effects = {
   "ice/freeze": ice_freeze,
   "ice/frost-breath": ice_frost_breath,
   "ice/frost-nova": ice_frost_nova,
+  "ice/ice-block-fall": ice_ice_block_fall,
   "ice/ice-crystal": ice_ice_crystal,
   "ice/ice-lance": ice_ice_lance,
   "ice/ice-shatter": ice_ice_shatter,
@@ -424,6 +429,7 @@ export const effects = {
   "status/stunned": status_stunned,
   "nature/acid-splash": nature_acid_splash,
   "nature/boulder": nature_boulder,
+  "nature/boulder-fall": nature_boulder_fall,
   "nature/earth-spike": nature_earth_spike,
   "nature/healing-bloom": nature_healing_bloom,
   "nature/leaf-storm": nature_leaf_storm,
