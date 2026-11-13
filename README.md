@@ -4,6 +4,9 @@
 
 # pixelfx.
 
+pixelfx is part of [Patch (patch.gg)](https://patch.gg), where people and their coding agents make browser games and
+mods, and publish them for anyone to play.
+
 **<!-- count -->244<!-- /count --> pixel art effects and animations, every one a small piece of code.** Fire,
 explosions, magic, weather, UI, pickups, critters and more. Play them live, recolor and mirror them, drop them into
 a browser game, or export sprite sheets for any engine. Plus a Claude Code skill that makes new ones the way a
@@ -16,8 +19,8 @@ It's also a block on Patch: [play pixelfx on Patch](https://patch.gg/patch/pixel
 palette, and start a browser game from it.
 
 **[open the gallery](https://patch-gg.github.io/pixelfx/)** · [catalog](docs/CATALOG.md) · [acting](#acting) ·
-[the skill](#the-skill) · [make your own](#make-your-own) · [publish it on patch](#publish-it-on-patch) ·
-[how it works](#how-it-works)
+[the skill](#the-skill) · [your coding agent](#use-it-from-your-coding-agent) · [make your own](#make-your-own) ·
+[publish it on patch](#publish-it-on-patch) · [how it works](#how-it-works)
 
 The method is [Hugo Duprez](https://x.com/HugoDuprez)'s, from [How to make (good) pixel art effects with
 Claude](https://www.spritefusion.com/blog/how-to-make-good-pixel-art-effects-with-claude): code is clay, trust your
@@ -167,6 +170,22 @@ or copy `skills/pixelfx` into `~/.claude/skills/`. Then ask for what you want:
 - "Export the fire and explosions categories as sprite sheets for Godot."
 - "This hit effect feels floaty. Make it punchier."
 - "Give this spell a wind-up and make the enemy react to it."
+
+## use it from your coding agent.
+
+Patch's MCP server gives your coding agent Patch's tools: it can find pixelfx and Patch's other open blocks, pull
+models, sprites and sounds from Patch's free asset library, and build, test and publish a browser game on Patch. `pch`,
+Patch's command line, sets it up:
+
+```bash
+curl -fsSL https://patch.gg/install.sh | sh    # installs pch; then open a new terminal
+pch login
+pch agent install                              # gives Claude Code, Codex and Cursor Patch's tools
+```
+
+The installer runs `pch agent install` for you; run it again for an agent you add later, then restart the agent. An app
+that adds MCP servers by address connects to `https://patch.gg/api/mcp` and signs in with your Patch account.
+[Patch's MCP server](https://docs.patch.gg/mcp-server) lists its tools.
 
 ## make your own.
 
