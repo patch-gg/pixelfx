@@ -3,7 +3,7 @@
 // tintActor adapts the body flash of Sprite Fusion's open-source power-up
 // (https://www.spritefusion.com/pixel-art-vfx/power-up), MIT License, Copyright (c) 2026 Hugo Duprez.
 
-import { FONTS, WHITE, luma, noise, mix } from "../../core/index.js";
+import { FONTS, orderBidiChars, WHITE, luma, noise, mix } from "../../core/index.js";
 
 /**
  * The letters of str in a pixel font, laid out left to right in font pixels:
@@ -12,7 +12,7 @@ import { FONTS, WHITE, luma, noise, mix } from "../../core/index.js";
 export function spell(str, font = "big") {
   const F = FONTS[font], letters = [];
   let x = 0;
-  for (const ch of String(str)) {
+  for (const ch of orderBidiChars(str)) {
     const g = F.glyphs[ch] ?? F.glyphs[ch.toUpperCase()] ?? null;
     const w = g ? g.w : F.space;
     letters.push({ ch, g, x, w, h: F.h });
